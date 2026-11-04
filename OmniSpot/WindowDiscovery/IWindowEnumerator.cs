@@ -1,5 +1,5 @@
-using OmniSpot.Configuration;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Configuration;
 
 namespace OmniSpot.WindowDiscovery;
 

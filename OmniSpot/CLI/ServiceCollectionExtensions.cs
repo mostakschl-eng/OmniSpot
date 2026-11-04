@@ -1,7 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using OmniSpot.Extensions;
 using OmniSpot.Startup;
 using OmniSpot.WindowDiscovery;
-using Microsoft.Extensions.DependencyInjection;
 using Wpf.Ui.Controls;
 using MessageBox = Wpf.Ui.Controls.MessageBox;
 

@@ -62,6 +62,7 @@
     </PackageReference>
     <PackageReference Include="NLog" Version="6.1.1" />
     <PackageReference Include="NLog.Extensions.Logging" Version="6.1.2" />
+    <PackageReference Include="System.Data.OleDb" Version="10.0.14" />
     <PackageReference Include="WPF-UI" Version="4.2.0" />
     <PackageReference Include="WPF-UI.Tray" Version="4.2.0" />
   </ItemGroup>

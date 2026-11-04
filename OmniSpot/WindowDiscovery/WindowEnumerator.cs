@@ -1,5 +1,5 @@
-using OmniSpot.Configuration;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Configuration;
 using System.Diagnostics;
 using System.IO;
 using Windows.Win32;

@@ -1,7 +1,7 @@
-using OmniSpot.Extensions;
-using OmniSpot.UI.ViewModels.Common;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using OmniSpot.Extensions;
+using OmniSpot.UI.ViewModels.Common;
 using Wpf.Ui;
 using Wpf.Ui.Controls;
 

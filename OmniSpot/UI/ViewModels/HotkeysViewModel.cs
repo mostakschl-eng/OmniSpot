@@ -1,8 +1,8 @@
-using OmniSpot.Extensions;
-using OmniSpot.UI.ViewModels.Common;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GongSolutions.Wpf.DragDrop;
+using OmniSpot.Extensions;
+using OmniSpot.UI.ViewModels.Common;
 using System.Windows;
 using Wpf.Ui;
 using Wpf.Ui.Controls;

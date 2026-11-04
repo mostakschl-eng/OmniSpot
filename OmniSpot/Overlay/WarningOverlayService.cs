@@ -1,5 +1,5 @@
-using OmniSpot.UI.Windows;
 using Microsoft.Extensions.Logging;
+using OmniSpot.UI.Windows;
 using System.Windows;
 using System.Windows.Threading;
 

@@ -1,10 +1,10 @@
-using OmniSpot.WindowDiscovery;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 using NLog;
 using NLog.Targets;
+using OmniSpot.WindowDiscovery;
 using System.Diagnostics;
 using System.IO;
 using System.Text;

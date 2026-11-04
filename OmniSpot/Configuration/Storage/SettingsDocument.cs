@@ -30,6 +30,10 @@ internal class SettingsDocument
 
     public bool StatsEnabled { get; init; } = false;
 
+    public bool SpotlightEnabled { get; init; } = true;
+
+    public Key SpotlightModifier { get; init; } = Key.LeftAlt;
+
     public Configuration ToConfiguration() =>
         new(
             Modifier,
@@ -41,7 +45,9 @@ internal class SettingsDocument
             OverlayKeepOpenWhileModifierHeld,
             PeekEnabled,
             DynamicModeEnabled,
-            StatsEnabled);
+            StatsEnabled,
+            SpotlightEnabled,
+            SpotlightModifier);
 
     public static SettingsDocument FromConfiguration(Configuration config, int id) =>
         new()
@@ -58,6 +64,8 @@ internal class SettingsDocument
             OverlayKeepOpenWhileModifierHeld = config.OverlayKeepOpenWhileModifierHeld,
             PeekEnabled = config.PeekEnabled,
             DynamicModeEnabled = config.DynamicModeEnabled,
-            StatsEnabled = config.StatsEnabled
+            StatsEnabled = config.StatsEnabled,
+            SpotlightEnabled = config.SpotlightEnabled,
+            SpotlightModifier = config.SpotlightModifier
         };
 }

@@ -1,5 +1,5 @@
-using OmniSpot.Extensions;
 using LiteDB;
+using OmniSpot.Extensions;
 using System.Windows.Input;
 
 namespace OmniSpot.Stats.Storage;

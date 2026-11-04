@@ -1,10 +1,10 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using JetBrains.Annotations;
 using OmniSpot.Configuration;
 using OmniSpot.Extensions;
 using OmniSpot.UI.ViewModels.Common;
 using OmniSpot.WindowDiscovery;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using JetBrains.Annotations;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Media.Imaging;

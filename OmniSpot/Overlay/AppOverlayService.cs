@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration;
 using OmniSpot.Extensions;
 using OmniSpot.Input;
@@ -5,7 +6,6 @@ using OmniSpot.Stats;
 using OmniSpot.UI.ViewModels;
 using OmniSpot.UI.Windows;
 using OmniSpot.WindowDiscovery;
-using Microsoft.Extensions.Logging;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;

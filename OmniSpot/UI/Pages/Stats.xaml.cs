@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Logging;
 using OmniSpot.Stats;
 using OmniSpot.UI.ViewModels;
 using OmniSpot.UI.ViewModels.Common;
-using Microsoft.Extensions.Logging;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;

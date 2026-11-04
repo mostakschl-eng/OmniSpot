@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using OmniSpot.Stats;
 using OmniSpot.Stats.Storage;
-using Microsoft.Extensions.Logging.Abstractions;
 using System.Windows.Media.Imaging;
 
 namespace OmniSpot.UI.ViewModels.DesignTime;

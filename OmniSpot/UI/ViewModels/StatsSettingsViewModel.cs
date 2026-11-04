@@ -1,11 +1,11 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using OmniSpot.Extensions;
 using OmniSpot.Stats;
 using OmniSpot.Stats.Storage;
 using OmniSpot.UI.ViewModels.Common;
 using OmniSpot.WindowDiscovery;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.Logging;
 using System.Windows;
 using System.Windows.Media;
 using Wpf.Ui;

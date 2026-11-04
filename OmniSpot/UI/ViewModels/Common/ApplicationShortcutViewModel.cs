@@ -1,5 +1,5 @@
-using OmniSpot.Configuration;
 using CommunityToolkit.Mvvm.ComponentModel;
+using OmniSpot.Configuration;
 using System.Windows.Input;
 using System.Windows.Media;
 

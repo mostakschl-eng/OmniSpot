@@ -1,10 +1,10 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration;
 using OmniSpot.Input;
 using OmniSpot.Startup;
 using OmniSpot.Stats;
 using OmniSpot.WindowDiscovery;
-using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Windows.Input;
@@ -90,6 +90,14 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDirty), nameof(CanSave))]
     private bool _statsEnabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty), nameof(CanSave))]
+    private bool _spotlightEnabled = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty), nameof(CanSave))]
+    private Key _spotlightModifierKey = Key.LeftAlt;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasDynamicApplications))]
@@ -187,6 +195,8 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
         PeekEnabled = config.PeekEnabled;
         DynamicModeEnabled = config.DynamicModeEnabled;
         StatsEnabled = config.StatsEnabled;
+        SpotlightEnabled = config.SpotlightEnabled;
+        SpotlightModifierKey = config.SpotlightModifier;
 
         _dirtyTracker?.Dispose();
 
@@ -305,7 +315,9 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
             OverlayKeepOpenWhileModifierHeld,
             PeekEnabled,
             DynamicModeEnabled,
-            StatsEnabled);
+            StatsEnabled,
+            SpotlightEnabled,
+            SpotlightModifierKey);
     }
 
     public ApplicationShortcutViewModel? AddApplication(ApplicationSelectionArgs args)
@@ -405,7 +417,9 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
                 OverlayKeepOpenWhileModifierHeld,
                 PeekEnabled,
                 DynamicModeEnabled,
-                StatsEnabled);
+                StatsEnabled,
+                SpotlightEnabled,
+                SpotlightModifierKey);
 
             if (_configurationManager.UpdateConfiguration(newConfig))
             {

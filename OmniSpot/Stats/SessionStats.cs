@@ -7,6 +7,7 @@ internal class SessionStats : ISessionStats
 {
     private DailyBucketDocument? _rolloverSnapshot;
     private DailyBucketDocument _currentSnapshot = new() { Date = DateOnly.FromDateTime(DateTime.Today) };
+    private readonly List<string> _recentProcessNames = [];
     // All Record* calls happen from one thread, but they can still clash with another thread calling GetSnapshots
     // This could potentially lead to an exception when modifying the dictionary while it's being read, so we use a lock to be safe
     private readonly object _lock = new();
@@ -22,6 +23,12 @@ internal class SessionStats : ISessionStats
             CheckRollover();
             _currentSnapshot.RecordSwitch(processName, durationMs, savedMs, isDynamic);
             _currentSnapshot.RecordFastestSwitch(processName, fastestDurationMs, triggerKey);
+            _recentProcessNames.Remove(processName);
+            _recentProcessNames.Insert(0, processName);
+            if (_recentProcessNames.Count > 20)
+            {
+                _recentProcessNames.RemoveAt(_recentProcessNames.Count - 1);
+            }
         }
 
         DataChanged?.Invoke();
@@ -115,4 +122,35 @@ internal class SessionStats : ISessionStats
     /// so that the next <c>Record*</c> call triggers day-rollover detection.
     /// </summary>
     internal void SimulateLastRecordedDate(DateOnly date) => _currentSnapshot.Date = date;
+
+    internal IReadOnlyList<string> GetRecentProcessNames()
+    {
+        lock (_lock)
+        {
+            return [.. _recentProcessNames];
+        }
+    }
+
+    internal IReadOnlyDictionary<string, int> GetUsageCounts()
+    {
+        lock (_lock)
+        {
+            CheckRollover();
+            var usage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var bucket in new[] { _rolloverSnapshot, _currentSnapshot })
+            {
+                if (bucket is null)
+                {
+                    continue;
+                }
+
+                foreach (var entry in bucket.StaticAppUsage.Concat(bucket.DynamicAppUsage))
+                {
+                    usage[entry.Key] = usage.GetValueOrDefault(entry.Key) + entry.Value.Switches;
+                }
+            }
+
+            return usage;
+        }
+    }
 }

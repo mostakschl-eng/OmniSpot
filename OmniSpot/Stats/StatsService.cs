@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Logging;
 using OmniSpot.Stats.Migrations;
 using OmniSpot.Stats.Storage;
-using Microsoft.Extensions.Logging;
 using System.Threading.Channels;
 using AppConfig = OmniSpot.Configuration.Configuration;
 

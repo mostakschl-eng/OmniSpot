@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration;
 using OmniSpot.WindowDiscovery;
-using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;

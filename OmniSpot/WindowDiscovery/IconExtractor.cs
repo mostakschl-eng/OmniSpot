@@ -8,6 +8,7 @@ namespace OmniSpot.WindowDiscovery;
 public class IconExtractor
 {
     private readonly Dictionary<string, ImageSource> _images = new();
+    private readonly object _lock = new();
     private ImageSource? _defaultIcon;
 
     public ImageSource? GetByProcessPath(string processPath)
@@ -17,16 +18,19 @@ public class IconExtractor
             return null;
         }
 
-        if (_images.TryGetValue(processPath, out var imageSource))
+        lock (_lock)
         {
-            return imageSource;
-        }
+            if (_images.TryGetValue(processPath, out var imageSource))
+            {
+                return imageSource;
+            }
 
-        var icon = LoadIconFromExe(processPath);
-        if (icon != null)
-        {
-            _images[processPath] = icon;
-            return icon;
+            var icon = LoadIconFromExe(processPath);
+            if (icon is not null)
+            {
+                _images[processPath] = icon;
+                return icon;
+            }
         }
 
         return null;
@@ -39,26 +43,34 @@ public class IconExtractor
             return null;
         }
 
-        if (_images.TryGetValue(iconPath, out var imageSource))
+        lock (_lock)
         {
-            return imageSource;
-        }
+            if (_images.TryGetValue(iconPath, out var imageSource))
+            {
+                return imageSource;
+            }
 
-        try
-        {
-            var image = Image.FromFile(iconPath);
-            return ConvertToImageSource(image);
-        }
-        catch
-        {
-            return null;
+            try
+            {
+                using var image = Image.FromFile(iconPath);
+                var extractedImage = ConvertToImageSource(image);
+                _images[iconPath] = extractedImage;
+                return extractedImage;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 
     public ImageSource GetDefaultIcon()
     {
-        _defaultIcon ??= GetByProcessPath(
-            Environment.GetFolderPath(Environment.SpecialFolder.System) + "\\shell32.dll")!;
+        lock (_lock)
+        {
+            _defaultIcon ??= GetByProcessPath(
+                Environment.GetFolderPath(Environment.SpecialFolder.System) + "\\shell32.dll")!;
+        }
 
         return _defaultIcon;
     }

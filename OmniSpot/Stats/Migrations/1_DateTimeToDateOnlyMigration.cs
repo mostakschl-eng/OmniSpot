@@ -1,5 +1,5 @@
-using OmniSpot.Stats.Storage;
 using LiteDB;
+using OmniSpot.Stats.Storage;
 
 namespace OmniSpot.Stats.Migrations;
 

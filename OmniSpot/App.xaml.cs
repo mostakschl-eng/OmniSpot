@@ -1,12 +1,12 @@
+using LiteDB;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OmniSpot.CLI;
 using OmniSpot.Configuration;
 using OmniSpot.Extensions;
 using OmniSpot.Input;
 using OmniSpot.Stats;
 using OmniSpot.UI.Windows;
-using LiteDB;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;

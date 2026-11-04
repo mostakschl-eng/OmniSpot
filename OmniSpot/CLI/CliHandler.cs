@@ -1,5 +1,5 @@
-using OmniSpot.Extensions;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Extensions;
 using System.Text;
 using Wpf.Ui.Controls;
 using FontFamily = System.Windows.Media.FontFamily;

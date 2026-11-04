@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using OmniSpot.Configuration;
 using JetBrains.Annotations;
+using OmniSpot.Configuration;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Media;

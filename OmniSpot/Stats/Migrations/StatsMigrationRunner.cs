@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration.Storage;
 using OmniSpot.Stats.Storage;
-using Microsoft.Extensions.Logging;
 
 namespace OmniSpot.Stats.Migrations;
 

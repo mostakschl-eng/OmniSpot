@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration;
 using OmniSpot.Extensions;
 using OmniSpot.WindowDiscovery;
-using Microsoft.Extensions.Logging;
 using System.Windows.Input;
 
 namespace OmniSpot.Input;

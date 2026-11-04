@@ -1,5 +1,5 @@
-using OmniSpot.Configuration.Migrations;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Configuration.Migrations;
 
 namespace OmniSpot.Configuration;
 

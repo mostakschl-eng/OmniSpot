@@ -1,6 +1,6 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using OmniSpot.Configuration;
 using OmniSpot.UI.ViewModels.Common;
-using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
@@ -23,6 +23,8 @@ internal class SettingsStateDesignTime : ObservableObject, ISettingsState
         OverlayEnabled = true;
         OverlayKeepOpenWhileModifierHeld = true;
         OverlayShowDelayMs = 300;
+        SpotlightEnabled = true;
+        SpotlightModifierKey = Key.LeftAlt;
         Applications =
         [
             new()
@@ -49,14 +51,14 @@ internal class SettingsStateDesignTime : ObservableObject, ISettingsState
                 ProcessName = "WindowsTerminal.exe",
                 DisplayName = "Windows Terminal",
                 StartIfNotRunning = false,
-                CycleMode = CycleMode.Hide,
+                CycleMode = CycleMode.NextApp,
                 ProcessIcon = defaultIcon,
             },
             new()
             {
-                Key = Key.D,
-                ProcessName = "DevToys.exe",
-                DisplayName = "DevToys",
+                Key = Key.W,
+                ProcessName = "wordpad.exe",
+                DisplayName = "WordPad",
                 StartIfNotRunning = false,
                 CycleMode = CycleMode.Hide,
                 ProcessIcon = defaultIcon,
@@ -95,7 +97,7 @@ internal class SettingsStateDesignTime : ObservableObject, ISettingsState
             {
                 Key = Key.N,
                 ProcessName = "notepad.exe",
-                ProcessPath = "C:\\Windows\\System32\\notepad.exe",
+                ProcessPath = "C:\\Windows\\notepad.exe",
                 ProcessIcon = defaultIcon,
                 DisplayName = "Notepad"
             },
@@ -120,6 +122,8 @@ internal class SettingsStateDesignTime : ObservableObject, ISettingsState
     public bool PeekEnabled { get; set; }
     public bool DynamicModeEnabled { get; set; }
     public bool StatsEnabled { get; set; }
+    public bool SpotlightEnabled { get; set; } = true;
+    public Key SpotlightModifierKey { get; set; } = Key.LeftAlt;
     public bool HasNoApplications => Applications.Count == 0;
     public ObservableCollection<DynamicApplicationViewModel> DynamicApplications { get; set; }
     public bool HasDynamicApplications => DynamicApplications.Count > 0;

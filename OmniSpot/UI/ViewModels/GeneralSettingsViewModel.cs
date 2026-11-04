@@ -1,6 +1,6 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using OmniSpot.Configuration;
 using OmniSpot.UI.ViewModels.Common;
-using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace OmniSpot.UI.ViewModels;
 

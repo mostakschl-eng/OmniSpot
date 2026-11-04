@@ -1,0 +1,64 @@
+<Page x:Class="OmniSpot.UI.Pages.SpotlightSearch"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:controls="clr-namespace:OmniSpot.UI.Controls"
+      xmlns:designTime="clr-namespace:OmniSpot.UI.ViewModels.DesignTime"
+      mc:Ignorable="d"
+      Title="Spotlight Search"
+      ScrollViewer.CanContentScroll="False"
+      d:DataContext="{d:DesignInstance designTime:SettingsStateDesignTime, IsDesignTimeCreatable=True}"
+      d:DesignWidth="700"
+      MinWidth="200"
+      ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
+      ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}" x:ClassModifier="internal">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,14,0">
+        <StackPanel Margin="0,5,0,20">
+
+            <ui:TextBlock Text="Spotlight Search"
+                          FontTypography="BodyStrong"
+                          VerticalAlignment="Center"
+                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                          Margin="2,0,0,7" />
+
+            <ui:CardControl Margin="0,8,0,12"
+                            Padding="20,10,20,10"
+                            Icon="{ui:SymbolIcon Search24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <ui:TextBlock FontTypography="BodyStrong"
+                                      Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                      Text="Enable Spotlight Search"
+                                      TextWrapping="WrapWithOverflow" />
+                        <ui:TextBlock Appearance="Secondary"
+                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                      Text="Quick search launcher for applications and Windows Search indexed files."
+                                      TextWrapping="WrapWithOverflow" />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ui:CardControl.Content>
+                    <ui:ToggleSwitch IsChecked="{Binding SpotlightEnabled, Mode=TwoWay}"
+                                     HorizontalContentAlignment="Left"
+                                     OffContent="Off"
+                                     OnContent="On" />
+                </ui:CardControl.Content>
+            </ui:CardControl>
+
+            <!-- Modifier Key -->
+            <DockPanel Margin="2,0,0,8">
+                <ui:TextBlock Text="Activation Shortcut (Modifier + Space bar)"
+                              FontTypography="BodyStrong"
+                              Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                              VerticalAlignment="Center" />
+            </DockPanel>
+
+            <ui:Card Margin="0,0,0,10" Padding="12,12,12,12" IsEnabled="{Binding SpotlightEnabled}">
+                <controls:ModifierKeySelector SelectedModifier="{Binding SpotlightModifierKey, Mode=TwoWay}" />
+            </ui:Card>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>
+

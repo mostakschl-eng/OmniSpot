@@ -1,6 +1,6 @@
-using OmniSpot.Configuration.Storage;
 using LiteDB;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Configuration.Storage;
 
 namespace OmniSpot.Configuration.Migrations;
 

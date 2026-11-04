@@ -1,5 +1,5 @@
-using OmniSpot.WindowDiscovery;
 using Microsoft.Extensions.Logging;
+using OmniSpot.WindowDiscovery;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Windows.Win32.Foundation;

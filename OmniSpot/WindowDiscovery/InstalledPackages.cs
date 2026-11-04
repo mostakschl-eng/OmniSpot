@@ -29,6 +29,8 @@ internal sealed class InstalledPackages
 
     public int Count => _installedPaths.Count;
 
+    public IReadOnlyCollection<string> Paths => _installedPaths;
+
     /// <summary>
     /// Returns <c>true</c> when <paramref name="processPath"/> is located anywhere inside an installed package,
     /// including its subdirectories (e.g. <c>&lt;InstalledPath&gt;\app\Claude.exe</c>).

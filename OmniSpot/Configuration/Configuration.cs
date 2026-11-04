@@ -21,7 +21,9 @@ internal record Configuration(
     bool OverlayKeepOpenWhileModifierHeld,
     bool PeekEnabled,
     bool DynamicModeEnabled,
-    bool StatsEnabled);
+    bool StatsEnabled,
+    bool SpotlightEnabled = true,
+    Key SpotlightModifier = Key.LeftAlt);
 
 [DebuggerDisplay("{Key} -> {ProcessName} (Type: {Type}, CycleMode: {CycleMode}, StartProcess: {StartIfNotRunning})")]
 public record ApplicationConfiguration(

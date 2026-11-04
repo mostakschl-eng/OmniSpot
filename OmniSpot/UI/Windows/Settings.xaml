@@ -66,6 +66,11 @@
                         <ui:SymbolIcon Symbol="LayerDiagonal20" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Spotlight Search" TargetPageType="{x:Type pages:SpotlightSearch}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Search24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="Stats" TargetPageType="{x:Type pages:Stats}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="DataHistogram24" />

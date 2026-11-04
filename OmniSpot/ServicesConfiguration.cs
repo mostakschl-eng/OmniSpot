@@ -1,9 +1,14 @@
+using LiteDB;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using NLog.Extensions.Logging;
 using OmniSpot.CLI;
 using OmniSpot.Configuration;
 using OmniSpot.Configuration.Migrations;
 using OmniSpot.Extensions;
 using OmniSpot.Input;
 using OmniSpot.Overlay;
+using OmniSpot.Spotlight;
 using OmniSpot.Startup;
 using OmniSpot.Stats;
 using OmniSpot.Stats.Migrations;
@@ -13,10 +18,6 @@ using OmniSpot.UI.ViewModels;
 using OmniSpot.UI.ViewModels.Common;
 using OmniSpot.UI.Windows;
 using OmniSpot.WindowDiscovery;
-using LiteDB;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using NLog.Extensions.Logging;
 using System.IO;
 using System.Reflection;
 using System.Windows.Controls;
@@ -100,6 +101,15 @@ internal static class ServicesConfiguration
         services.AddTransient<AddApplicationFlyoutViewModel>();
         services.AddTransient<AboutViewModel>();
         services.AddSingleton<AppOverlayViewModel>();
+
+        // spotlight
+        services.AddTransient<IAppSearchProvider, AppSearchProvider>();
+        services.AddTransient<IFileSearchProvider, WindowsSearchFileProvider>();
+        services.AddTransient<ISpotlightSearchService, SpotlightSearchService>();
+        services.AddSingleton<SpotlightService>();
+        services.AddSingleton<SpotlightWindow>();
+        services.AddSingleton<SpotlightViewModel>();
+        services.AddTransient<SpotlightSearchSettingsViewModel>();
 
         return services.BuildServiceProvider();
     }

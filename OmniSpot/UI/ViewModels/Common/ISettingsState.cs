@@ -16,6 +16,8 @@ internal interface ISettingsState : INotifyPropertyChanged
     bool PeekEnabled { get; set; }
     bool DynamicModeEnabled { get; set; }
     bool StatsEnabled { get; set; }
+    bool SpotlightEnabled { get; set; }
+    Key SpotlightModifierKey { get; set; }
     ObservableCollection<ApplicationShortcutViewModel> Applications { get; set; }
     bool HasNoApplications { get; }
     ObservableCollection<DynamicApplicationViewModel> DynamicApplications { get; set; }

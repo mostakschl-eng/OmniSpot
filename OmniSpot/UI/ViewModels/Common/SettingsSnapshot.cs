@@ -13,7 +13,9 @@ internal sealed record SettingsSnapshot(
     bool OverlayKeepOpenWhileModifierHeld,
     bool PeekEnabled,
     bool DynamicModeEnabled,
-    bool StatsEnabled)
+    bool StatsEnabled,
+    bool SpotlightEnabled = true,
+    Key SpotlightModifierKey = Key.LeftAlt)
 {
     // This is needed because regular record equality would do only reference comparison for Applications collection
     public bool Equals(SettingsSnapshot? other)
@@ -32,6 +34,8 @@ internal sealed record SettingsSnapshot(
                PeekEnabled == other.PeekEnabled &&
                DynamicModeEnabled == other.DynamicModeEnabled &&
                StatsEnabled == other.StatsEnabled &&
+               SpotlightEnabled == other.SpotlightEnabled &&
+               SpotlightModifierKey == other.SpotlightModifierKey &&
                Applications.SequenceEqual(other.Applications);
     }
 
@@ -47,6 +51,8 @@ internal sealed record SettingsSnapshot(
         hash.Add(PeekEnabled);
         hash.Add(DynamicModeEnabled);
         hash.Add(StatsEnabled);
+        hash.Add(SpotlightEnabled);
+        hash.Add(SpotlightModifierKey);
         return hash.ToHashCode();
     }
 }

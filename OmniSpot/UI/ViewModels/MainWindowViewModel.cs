@@ -1,12 +1,12 @@
-using OmniSpot.Extensions;
-using OmniSpot.Stats;
-using OmniSpot.UI.ViewModels.Common;
-using OmniSpot.UI.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using OmniSpot.Extensions;
+using OmniSpot.Stats;
+using OmniSpot.UI.ViewModels.Common;
+using OmniSpot.UI.Windows;
 using System.Windows;
 using Wpf.Ui.Controls;
 using MessageBox = Wpf.Ui.Controls.MessageBox;

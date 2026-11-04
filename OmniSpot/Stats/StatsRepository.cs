@@ -1,5 +1,5 @@
-using OmniSpot.Stats.Storage;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Stats.Storage;
 
 namespace OmniSpot.Stats;
 

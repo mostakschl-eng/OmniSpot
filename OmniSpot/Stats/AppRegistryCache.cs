@@ -1,8 +1,8 @@
+using LiteDB;
+using Microsoft.Extensions.Logging;
 using OmniSpot.Extensions;
 using OmniSpot.Stats.Storage;
 using OmniSpot.WindowDiscovery;
-using LiteDB;
-using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.IO;
 

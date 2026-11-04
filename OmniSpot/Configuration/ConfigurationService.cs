@@ -1,7 +1,7 @@
-using OmniSpot.Configuration.Storage;
-using OmniSpot.Extensions;
 using LiteDB;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Configuration.Storage;
+using OmniSpot.Extensions;
 using System.Windows.Input;
 
 namespace OmniSpot.Configuration;
@@ -65,7 +65,9 @@ internal class ConfigurationService(LiteDatabase database, ILogger<Configuration
             OverlayEnabled = false,
             OverlayShowDelayMs = 1000,
             OverlayKeepOpenWhileModifierHeld = true,
-            DynamicModeEnabled = true
+            DynamicModeEnabled = true,
+            SpotlightEnabled = true,
+            SpotlightModifier = Key.LeftAlt
         };
 
         collection.Insert(defaults);

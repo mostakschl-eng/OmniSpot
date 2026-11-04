@@ -1,5 +1,5 @@
-using OmniSpot.WindowDiscovery;
 using LiteDB;
+using OmniSpot.WindowDiscovery;
 using System.Windows.Input;
 
 namespace OmniSpot.Configuration.Migrations;

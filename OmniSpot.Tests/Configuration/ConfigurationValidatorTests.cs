@@ -185,4 +185,20 @@ public class ConfigurationValidatorTests
 
         result.Status.Should().Be(ValidationResultStatus.Success);
     }
+
+    [Fact]
+    public void ValidateAndLog_ReturnsError_WhenSpotlightModifierIsInvalid()
+    {
+        var config = new AppConfig(
+            Key.LeftCtrl,
+            [],
+            true, AppThemeSetting.System, true, 1000, true, false, false, true,
+            SpotlightEnabled: true,
+            SpotlightModifier: Key.A);
+
+        var result = _sut.ValidateAndLog(config);
+
+        result.Status.Should().Be(ValidationResultStatus.Error);
+        result.Message.Should().Contain("Invalid spotlight modifier key");
+    }
 }

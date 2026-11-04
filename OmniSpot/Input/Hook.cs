@@ -1,9 +1,10 @@
-using OmniSpot.Extensions;
-using OmniSpot.Overlay;
-using OmniSpot.Stats;
-using OmniSpot.WindowDiscovery;
 using KeyboardHookLite;
 using Microsoft.Extensions.Logging;
+using OmniSpot.Extensions;
+using OmniSpot.Overlay;
+using OmniSpot.Spotlight;
+using OmniSpot.Stats;
+using OmniSpot.WindowDiscovery;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Windows;
@@ -22,7 +23,8 @@ internal class Hook(
     AppOverlayService overlayService,
     IProcessInspector processInspector,
     DynamicModeService dynamicModeService,
-    StatsService statsService) : IDisposable
+    StatsService statsService,
+    SpotlightService spotlightService) : IDisposable
 {
     private const int SyntheticModifierTapMaxDurationMs = 200;
 
@@ -43,7 +45,7 @@ internal class Hook(
     public void Start(AppConfig config)
     {
         _config = config;
-        _stateMachine.Configure(config.Modifier);
+        _stateMachine.Configure(config.Modifier, config.SpotlightModifier, config.SpotlightEnabled);
         overlayShowTimer.Configure(onExpired: () => overlayService.Show(config.Applications, config.DynamicModeEnabled), config.OverlayShowDelayMs);
         logger.LogInformation("Starting hook");
         _hook.KeyboardPressed += Hook_KeyboardPressed;
@@ -64,7 +66,7 @@ internal class Hook(
     public void UpdateConfiguration(AppConfig config)
     {
         _config = config;
-        _stateMachine.Configure(config.Modifier);
+        _stateMachine.Configure(config.Modifier, config.SpotlightModifier, config.SpotlightEnabled);
         overlayShowTimer.Configure(onExpired: () => overlayService.Show(config.Applications, config.DynamicModeEnabled), config.OverlayShowDelayMs);
         // Reset state when configuration changes (especially if modifier key changes)
         ResetModifierState();
@@ -121,6 +123,10 @@ internal class Hook(
                 break;
             case KeyTransition.DigitKeyPressed { Key: var digit }:
                 HandleDigitPressed(e, digit);
+                break;
+            case KeyTransition.SpotlightShortcutPressed:
+                e.SuppressKeyPress = true;
+                spotlightService.Toggle();
                 break;
             case KeyTransition.AltTabSwitched altTab:
                 // this handles Right Alt when switch is triggered by Enter

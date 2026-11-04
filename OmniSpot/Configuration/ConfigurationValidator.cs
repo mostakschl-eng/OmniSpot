@@ -37,6 +37,11 @@ internal class ConfigurationValidator(ILogger<ConfigurationValidator> logger)
             return ValidationResult.Error($"Invalid modifier key ({configuration.Modifier}) - must be one of: {string.Join(", ", _validModifiers)}");
         }
 
+        if (!_validModifiers.Contains(configuration.SpotlightModifier))
+        {
+            return ValidationResult.Error($"Invalid spotlight modifier key ({configuration.SpotlightModifier}) - must be one of: {string.Join(", ", _validModifiers)}");
+        }
+
         foreach (var app in configuration.Applications)
         {
             var result = ValidateApplication(app);

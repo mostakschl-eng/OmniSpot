@@ -1,5 +1,5 @@
-using OmniSpot.WindowDiscovery;
 using Microsoft.Extensions.Logging;
+using OmniSpot.WindowDiscovery;
 using System.IO;
 using System.Text.RegularExpressions;
 

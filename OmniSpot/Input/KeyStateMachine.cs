@@ -29,6 +29,8 @@ internal sealed class KeyStateMachine
 
     private State _state = State.Idle;
     private Key _configuredModifier;
+    private Key _spotlightModifier = Key.LeftAlt;
+    private bool _spotlightEnabled = true;
     private readonly HashSet<Key> _heldKeyboardModifiers = [];
 
     // Alt+Tab tracking (independent of the configured modifier)
@@ -48,6 +50,11 @@ internal sealed class KeyStateMachine
         if (KeyboardModifiers.Contains(key))
         {
             _heldKeyboardModifiers.Add(key);
+        }
+
+        if (_spotlightEnabled && key == Key.Space && IsSpotlightModifierHeld())
+        {
+            return new KeyTransition.SpotlightShortcutPressed();
         }
 
         // Alt+Tab tracking — guard: only when the key is not the configured modifier
@@ -178,9 +185,11 @@ internal sealed class KeyStateMachine
         };
     }
 
-    public void Configure(Key newModifier)
+    public void Configure(Key newModifier, Key spotlightModifier = Key.LeftAlt, bool spotlightEnabled = true)
     {
         _configuredModifier = newModifier;
+        _spotlightModifier = spotlightModifier;
+        _spotlightEnabled = spotlightEnabled;
         Reset();
     }
 
@@ -197,6 +206,27 @@ internal sealed class KeyStateMachine
         _altTabActive = false;
         _altTabIsSticky = false;
         _altNavCount = 0;
+    }
+
+    private bool IsSpotlightModifierHeld()
+    {
+        if (_spotlightModifier is Key.LeftAlt or Key.RightAlt)
+        {
+            return _heldKeyboardModifiers.Contains(Key.LeftAlt) || _heldKeyboardModifiers.Contains(Key.RightAlt);
+        }
+        if (_spotlightModifier is Key.LeftCtrl or Key.RightCtrl)
+        {
+            return _heldKeyboardModifiers.Contains(Key.LeftCtrl) || _heldKeyboardModifiers.Contains(Key.RightCtrl);
+        }
+        if (_spotlightModifier is Key.LeftShift or Key.RightShift)
+        {
+            return _heldKeyboardModifiers.Contains(Key.LeftShift) || _heldKeyboardModifiers.Contains(Key.RightShift);
+        }
+        if (_spotlightModifier is Key.LWin or Key.RWin)
+        {
+            return _heldKeyboardModifiers.Contains(Key.LWin) || _heldKeyboardModifiers.Contains(Key.RWin);
+        }
+        return _heldKeyboardModifiers.Contains(_spotlightModifier);
     }
 
     private bool HasUnexpectedModifierHeld() =>
@@ -230,6 +260,9 @@ internal abstract record KeyTransition
 
     /// <summary>Left/Right Alt released (or Enter in RightAlt sticky mode) after ≥1 Tab press. <see cref="NavCount"/> is total navigation keypresses (Tab + arrow keys).</summary>
     public sealed record AltTabSwitched(int NavCount) : KeyTransition;
+
+    /// <summary>Spotlight shortcut (SpotlightModifier + Space) was pressed.</summary>
+    public sealed record SpotlightShortcutPressed : KeyTransition;
 
     /// <summary>Nothing notable: key-up/down for non-modifier key, or modifier not held.</summary>
     public sealed record NoOp : KeyTransition;
