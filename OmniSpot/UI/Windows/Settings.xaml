@@ -1,0 +1,126 @@
+<ui:FluentWindow
+    x:Class="OmniSpot.UI.Windows.Settings"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:pages="clr-namespace:OmniSpot.UI.Pages"
+    xmlns:designTime="clr-namespace:OmniSpot.UI.ViewModels.DesignTime"
+    mc:Ignorable="d"
+    d:DataContext="{d:DesignInstance designTime:SettingsViewModelDesignTime, IsDesignTimeCreatable=True}"
+    ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
+    ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+    WindowStartupLocation="CenterScreen"
+    ExtendsContentIntoTitleBar="True"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Default"
+    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+    Title="OmniSpot Settings"
+    MinHeight="600"
+    Height="770"
+    MinWidth="900"
+    MaxWidth="1200"
+    Width="900" x:ClassModifier="internal">
+    <ui:FluentWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </ui:FluentWindow.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="50" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar
+            Grid.Row="0"
+            Title="OmniSpot">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="pack://application:,,,/Resources/app-switcher.png" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+        <ui:NavigationView
+            Grid.Row="0"
+            x:Name="NavigationView"
+            Padding="20, 20, 6, 20"
+            FrameMargin="0"
+            Margin="10,45,10,10"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleVisible="False"
+            OpenPaneLength="200"
+            IsPaneVisible="False"
+            HeaderVisibility="Collapsed"
+            PaneDisplayMode="Left"
+            Transition="None">
+            <ui:NavigationView.MenuItems>
+                <ui:NavigationViewItem Content="General" TargetPageType="{x:Type pages:General}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Settings24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Applications" TargetPageType="{x:Type pages:Hotkeys}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="AppsList24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Overlay" TargetPageType="{x:Type pages:Overlay}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="LayerDiagonal20" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Stats" TargetPageType="{x:Type pages:Stats}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="DataHistogram24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+            </ui:NavigationView.MenuItems>
+            <ui:NavigationView.FooterMenuItems>
+                <ui:NavigationViewItem Content="About" TargetPageType="{x:Type pages:About}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Info24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+            </ui:NavigationView.FooterMenuItems>
+        </ui:NavigationView>
+        <Grid Grid.Row="1" Margin="26,0,12,0">
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0"
+                  VerticalAlignment="Center"
+                   Visibility="{Binding State.HasValidationErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ui:SymbolIcon Grid.Column="0"
+                               Symbol="Warning24"
+                               Margin="0,0,8,0"
+                               Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                <ui:TextBlock Grid.Column="1"
+                              Margin="0, 0,10,0"
+                              Text="{Binding State.ValidationSummary}"
+                              Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                              VerticalAlignment="Center"
+                              TextTrimming="CharacterEllipsis" />
+            </Grid>
+
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+
+                <ui:Button Content="Reset changes"
+                           Margin="0,0,10,0"
+                           IsEnabled="{Binding State.IsDirty}"
+                           Command="{Binding ResetCommand}" />
+                <ui:Button Content="Save &amp; Apply"
+                           Appearance="Primary"
+                           IsEnabled="{Binding State.CanSave}"
+                           Command="{Binding SaveAndCloseCommand}" />
+            </StackPanel>
+        </Grid>
+        <ui:SnackbarPresenter x:Name="RootSnackbarPresenter" Grid.Row="0" Grid.RowSpan="2" />
+        <ui:ContentDialogHost x:Name="RootDialogHost" Grid.Row="0" Grid.RowSpan="2" />
+    </Grid>
+</ui:FluentWindow>

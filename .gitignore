@@ -1,0 +1,22 @@
+# User-specific files
+*.suo
+*.user
+
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# dot dirs
+.vs/
+.tmp/
+
+# NuGet Packages
+*.nupkg
+
+# JetBrains Rider
+*.sln.iml
+/.idea
+
+/.opencode
+/OmniSpot/Inno_Files
+/website/docs
