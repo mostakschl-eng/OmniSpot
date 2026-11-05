@@ -1,6 +1,8 @@
 use super::window_title_parser::WindowTitleParser;
 use crate::ui::view_models::application_shortcut::{ApplicationShortcut, CycleMode};
-use crate::ui::view_models::overlay::{OverlayRow, OverlayState, OverlayWindowGroup};
+use crate::ui::view_models::overlay::{
+    OverlayAction, OverlayRow, OverlayState, OverlayWindowGroup,
+};
 use std::collections::HashSet;
 
 pub(crate) struct DiscoveredWindow {
@@ -45,6 +47,13 @@ impl AppOverlayService {
                 key: app.key.clone(),
                 active,
                 elevated: matching.iter().any(|window| window.needs_elevation),
+                action: matching
+                    .first()
+                    .map(|window| OverlayAction::ActivateWindow(window.handle))
+                    .unwrap_or_else(|| OverlayAction::Launch {
+                        path: app.process_path.clone(),
+                        aumid: app.aumid.clone(),
+                    }),
             };
             if matching.is_empty() {
                 state.launchable.push(row);
@@ -76,6 +85,7 @@ impl AppOverlayService {
                         },
                         active: Some(window.handle) == current_handle,
                         elevated: window.needs_elevation,
+                        action: OverlayAction::ActivateWindow(window.handle),
                     })
                     .collect();
                 state.window_groups.push(OverlayWindowGroup {
@@ -98,6 +108,14 @@ impl AppOverlayService {
                         window.process_path.eq_ignore_ascii_case(&app.process_path)
                             && window.needs_elevation
                     }),
+                    action: windows
+                        .iter()
+                        .find(|window| window.process_path.eq_ignore_ascii_case(&app.process_path))
+                        .map(|window| OverlayAction::ActivateWindow(window.handle))
+                        .unwrap_or_else(|| OverlayAction::Launch {
+                            path: app.process_path.clone(),
+                            aumid: None,
+                        }),
                 })
                 .collect();
         }
@@ -123,6 +141,7 @@ mod tests {
             process_path: r"C:\Apps\vivaldi.exe".into(),
             cycle_mode: CycleMode::NextWindow,
             start_if_not_running: false,
+            aumid: None,
         };
         let windows = [
             DiscoveredWindow {

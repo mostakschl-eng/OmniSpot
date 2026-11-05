@@ -1,5 +1,7 @@
 use crate::ui::view_models::settings_state::SettingsState;
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rgb};
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 
 const SHELL: u32 = 0x1c211f;
 const PANEL: u32 = 0x232826;
@@ -35,6 +37,8 @@ pub struct SettingsWindow {
     pub(crate) state: SettingsState,
     pub(crate) theme_menu_open: bool,
     pub(crate) add_flyout_open: bool,
+    pub(crate) stats: Option<Arc<Mutex<crate::stats::StatsService>>>,
+    pub(crate) events: Option<Sender<crate::input::hook::InputEvent>>,
 }
 
 impl Default for SettingsWindow {
@@ -44,11 +48,21 @@ impl Default for SettingsWindow {
             state: SettingsState::default(),
             theme_menu_open: false,
             add_flyout_open: false,
+            stats: None,
+            events: None,
         }
     }
 }
-
 impl SettingsWindow {
+    pub(crate) fn with_stats(
+        stats: Option<Arc<Mutex<crate::stats::StatsService>>>,
+        events: Option<Sender<crate::input::hook::InputEvent>>,
+    ) -> Self {
+        let mut settings = Self::default();
+        settings.stats = stats;
+        settings.events = events;
+        settings
+    }
     fn nav(&self, page: Page, cx: &mut Context<Self>) -> impl IntoElement {
         let selected = self.page == page;
         div()
@@ -93,13 +107,24 @@ impl SettingsWindow {
             .child(if enabled { "●  On" } else { "○  Off" })
             .on_click(cx.listener(move |this, _, _, cx| {
                 match index {
-                    0 => this.state.launch_at_startup = !this.state.launch_at_startup,
+                    0 => {
+                        let _ = this
+                            .state
+                            .set_launch_at_startup(!this.state.launch_at_startup);
+                    }
                     1 => this.state.dynamic_mode = !this.state.dynamic_mode,
                     2 => this.state.pulse_border = !this.state.pulse_border,
                     3 => this.state.peek_mode = !this.state.peek_mode,
                     4 => this.state.overlay_enabled = !this.state.overlay_enabled,
                     5 => this.state.overlay_keep_open = !this.state.overlay_keep_open,
-                    6 => this.state.stats_enabled = !this.state.stats_enabled,
+                    6 => {
+                        this.state.stats_enabled = !this.state.stats_enabled;
+                        if let Some(stats) = &this.stats {
+                            if let Ok(mut stats) = stats.lock() {
+                                stats.set_enabled(this.state.stats_enabled);
+                            }
+                        }
+                    }
                     7 => this.state.spotlight_enabled = !this.state.spotlight_enabled,
                     _ => return,
                 }
@@ -166,8 +191,41 @@ impl Render for SettingsWindow {
                     .justify_end()
                     .gap_2()
                     .text_color(rgb(MUTED))
-                    .child("Reset changes")
-                    .child(div().px_3().py_2().bg(rgb(CARD)).child("Save & Apply")),
+                    .child(
+                        div()
+                            .id("reset-changes")
+                            .px_3()
+                            .py_2()
+                            .bg(rgb(CARD))
+                            .cursor_pointer()
+                            .child("Reset changes")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                let _ = this.state.reset();
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        div()
+                            .id("save-apply")
+                            .px_3()
+                            .py_2()
+                            .bg(rgb(0xc6b690))
+                            .text_color(rgb(0x171a18))
+                            .cursor_pointer()
+                            .child("Save & Apply")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                if let Ok(configuration) = this.state.save() {
+                                    if let Some(events) = &this.events {
+                                        let _ = events.send(
+                                            crate::input::hook::InputEvent::ConfigurationUpdated(
+                                                configuration,
+                                            ),
+                                        );
+                                    }
+                                }
+                                cx.notify();
+                            })),
+                    ),
             )
     }
 }

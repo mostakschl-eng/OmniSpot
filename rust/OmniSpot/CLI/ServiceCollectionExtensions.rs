@@ -1,11 +1,18 @@
 use super::cli_builder::CliBuilder;
 use crate::startup::auto_start::AutoStart;
+use crate::window_discovery::WindowEnumerator;
+
+fn log_all_windows() -> Result<(), String> {
+    let path = WindowEnumerator::default().log_all_windows()?;
+    println!("Window snapshot written to {}", path.display());
+    Ok(())
+}
 
 pub(crate) fn cli_builder() -> CliBuilder {
     let mut builder = CliBuilder::default();
     builder
         .add_command("--log-all-windows", "Log all windows to log file", || {
-            Err("WindowDiscovery is not ported yet; no windows were logged.".into())
+            log_all_windows()
         })
         .add_command(
             "--enable-auto-start",

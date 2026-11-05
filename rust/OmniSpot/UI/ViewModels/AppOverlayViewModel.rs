@@ -16,4 +16,11 @@ pub struct OverlayRow {
     pub key: String,
     pub active: bool,
     pub elevated: bool,
+    pub action: OverlayAction,
+}
+
+#[derive(Clone)]
+pub enum OverlayAction {
+    ActivateWindow(isize),
+    Launch { path: String, aumid: Option<String> },
 }

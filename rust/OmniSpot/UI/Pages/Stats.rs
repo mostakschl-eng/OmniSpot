@@ -46,6 +46,11 @@ impl SettingsWindow {
                     .child("Enable Statistics")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.state.stats_enabled = true;
+                        if let Some(stats) = &this.stats {
+                            if let Ok(mut stats) = stats.lock() {
+                                stats.set_enabled(true);
+                            }
+                        }
                         cx.notify();
                     })),
             );
@@ -74,10 +79,27 @@ impl SettingsWindow {
                             .child("Disable Data Collection")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.state.stats_enabled = false;
+                                if let Some(stats) = &this.stats {
+                                    if let Ok(mut stats) = stats.lock() {
+                                        stats.set_enabled(false);
+                                    }
+                                }
                                 cx.notify();
                             })),
                     )
-                    .child(bento_dashboard())
+                    .child({
+                        let metrics = self
+                            .stats
+                            .as_ref()
+                            .and_then(|stats| stats.lock().ok().map(|stats| stats.metrics()));
+                        if let Some(metrics) = metrics {
+                            bento_dashboard(&metrics).into_any_element()
+                        } else {
+                            div()
+                                .child("Statistics will appear after the first recorded action")
+                                .into_any_element()
+                        }
+                    })
                     .into_any_element()
             } else {
                 shield.into_any_element()

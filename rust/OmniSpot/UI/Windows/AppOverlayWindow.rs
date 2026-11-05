@@ -1,12 +1,19 @@
+use crate::input::hook::InputEvent;
 use crate::ui::view_models::overlay::{OverlayRow, OverlayState};
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rgb};
+use std::sync::mpsc::Sender;
 
 #[derive(Default)]
 pub struct AppOverlayWindow {
     pub state: OverlayState,
+    pub events: Option<Sender<InputEvent>>,
 }
 
-fn row(item: &OverlayRow) -> impl IntoElement {
+fn row(item: &OverlayRow, events: Option<Sender<InputEvent>>) -> impl IntoElement {
+    let action = item.action.clone();
+    let id = item.key.bytes().fold(0usize, |value, byte| {
+        value.wrapping_mul(31).wrapping_add(byte as usize)
+    });
     div()
         .h(px(32.0))
         .px_1()
@@ -15,6 +22,24 @@ fn row(item: &OverlayRow) -> impl IntoElement {
         .flex()
         .items_center()
         .justify_between()
+        .id(id)
+        .cursor_pointer()
+        .on_click(move |_, _, _| {
+            let event = match &action {
+                crate::ui::view_models::overlay::OverlayAction::ActivateWindow(handle) => {
+                    InputEvent::ActivateWindow { handle: *handle }
+                }
+                crate::ui::view_models::overlay::OverlayAction::Launch { path, aumid } => {
+                    InputEvent::LaunchApplication {
+                        path: path.clone(),
+                        aumid: aumid.clone(),
+                    }
+                }
+            };
+            if let Some(events) = &events {
+                let _ = events.send(event);
+            }
+        })
         .child(item.name.clone())
         .when(item.elevated, |element| element.child("⚠"))
         .child(
@@ -43,10 +68,20 @@ impl Render for AppOverlayWindow {
                     .flex_col()
                     .gap_1()
                     .child(format!("{} windows", group.app_name))
-                    .children(group.windows.iter().map(row))
+                    .children(
+                        group
+                            .windows
+                            .iter()
+                            .map(|item| row(item, self.events.clone())),
+                    )
             }))
             .child(div().text_xs().child("Running apps"))
-            .children(self.state.running.iter().map(row))
+            .children(
+                self.state
+                    .running
+                    .iter()
+                    .map(|item| row(item, self.events.clone())),
+            )
             .when(self.state.running.is_empty(), |element| {
                 element.child(
                     div()
@@ -58,12 +93,22 @@ impl Render for AppOverlayWindow {
             .when(!self.state.launchable.is_empty(), |element| {
                 element
                     .child(div().text_xs().child("Launchable apps"))
-                    .children(self.state.launchable.iter().map(row))
+                    .children(
+                        self.state
+                            .launchable
+                            .iter()
+                            .map(|item| row(item, self.events.clone())),
+                    )
             })
             .when(!self.state.dynamic.is_empty(), |element| {
                 element
                     .child(div().text_xs().child("Dynamic apps"))
-                    .children(self.state.dynamic.iter().map(row))
+                    .children(
+                        self.state
+                            .dynamic
+                            .iter()
+                            .map(|item| row(item, self.events.clone())),
+                    )
             })
     }
 }

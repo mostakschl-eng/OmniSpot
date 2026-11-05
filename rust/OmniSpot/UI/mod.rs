@@ -4,6 +4,8 @@ pub(crate) mod controls;
 pub(crate) mod converters;
 #[path = "Pages/mod.rs"]
 pub(crate) mod pages;
+#[path = "Tray.rs"]
+pub(crate) mod tray;
 #[path = "ViewModels/mod.rs"]
 pub(crate) mod view_models;
 #[path = "Windows/mod.rs"]
