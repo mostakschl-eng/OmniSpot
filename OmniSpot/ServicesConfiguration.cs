@@ -1,0 +1,183 @@
+using LiteDB;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using NLog.Extensions.Logging;
+using OmniSpot.CLI;
+using OmniSpot.Configuration;
+using OmniSpot.Configuration.Migrations;
+using OmniSpot.Extensions;
+using OmniSpot.Input;
+using OmniSpot.Overlay;
+using OmniSpot.Spotlight;
+using OmniSpot.Startup;
+using OmniSpot.Stats;
+using OmniSpot.Stats.Migrations;
+using OmniSpot.Stats.Storage;
+using OmniSpot.UI.Pages;
+using OmniSpot.UI.ViewModels;
+using OmniSpot.UI.ViewModels.Common;
+using OmniSpot.UI.Windows;
+using OmniSpot.WindowDiscovery;
+using System.IO;
+using System.Reflection;
+using System.Windows.Controls;
+using Wpf.Ui;
+using Wpf.Ui.Abstractions;
+using Wpf.Ui.Controls;
+
+namespace OmniSpot;
+
+internal static class ServicesConfiguration
+{
+    public static IServiceProvider? Build(bool isPortableMode)
+    {
+        var services = new ServiceCollection();
+
+        services.AddLogging(logging => logging.AddNLog());
+
+        if (!services.SetupDatabases(isPortableMode))
+        {
+            return null;
+        }
+
+        services.AddSingleton(TimeProvider.System);
+        services.AddTransient<INavigationViewPageProvider, PageProviderService>();
+        services.AddSingleton<ISnackbarService, SnackbarService>();
+        services.AddSingleton<IContentDialogService, ContentDialogService>();
+
+        services.AddTransient<ConfigurationService>();
+        services.AddTransient<ConfigurationValidator>();
+        services.AddTransient<ApplicationsValidator>();
+        services.AddTransient<PackagedAppPathSanitizer>();
+        services.AddTransient<MigrationRunner>();
+        services.AddImplementationsOf<IMigration>(ServiceLifetime.Transient);
+        services.AddSingleton<ConfigurationManager>();
+        services.AddSingleton<Hook>();
+        services.AddSingleton<DynamicModeService>();
+        services.AddSingleton<IAppNameResolver, AppNameResolver>();
+        services.AddSingleton<Peeker>();
+        services.AddTransient<Switcher>();
+        services.AddTransient<AutoStart>();
+        services.AddSingleton<IconExtractor>();
+        services.AddTransient<OverlayShowTimer>();
+        services.AddTransient<IProcessPathExtractor, ProcessPathExtractor>();
+        services.AddTransient<RunningApplicationsService>();
+        services.AddTransient<IPackagedAppsService, PackagedAppsService>();
+        services.AddSingleton<IWindowEnumerator, WindowEnumerator>();
+        services.AddTransient<WindowTitleParser>();
+        services.AddTransient<AppOverlayService>();
+        services.AddSingleton<WarningOverlayService>();
+        services.AddTransient<IProcessInspector, ProcessInspector>();
+
+        services.AddSingleton<SessionStats>();
+        services.AddSingleton<ISessionStats>(sp => sp.GetRequiredService<SessionStats>());
+        services.AddSingleton<AppRegistryCache>();
+        services.AddSingleton<IAppRegistryCache>(sp => sp.GetRequiredService<AppRegistryCache>());
+        services.AddSingleton<StatsService>();
+        services.AddTransient<StatsRepository>();
+        services.AddTransient<StatsCalculator>();
+        services.AddTransient<StatsMigrationRunner>();
+        services.AddImplementationsOf<IStatsMigration>(ServiceLifetime.Transient);
+
+        services.AddCliHandler();
+
+        // windows
+        services.AddTransient<MainWindow>();
+        services.AddTransient<Settings>();
+        services.AddSingleton<AppOverlayWindow>();
+        services.AddSingleton<WarningOverlayWindow>();
+
+        // pages
+        services.AddImplementationsOf<Page>(ServiceLifetime.Transient, registerAsConcreteType: true);
+
+        // view models
+        services.AddTransient<MainWindowViewModel>();
+        services.AddSingleton<ISettingsState, SettingsState>();
+        services.AddTransient<SettingsViewModel>();
+        services.AddTransient<HotkeysViewModel>();
+        services.AddTransient<GeneralSettingsViewModel>();
+        services.AddTransient<OverlaySettingsViewModel>();
+        services.AddTransient<StatsSettingsViewModel>();
+        services.AddTransient<AddApplicationFlyoutViewModel>();
+        services.AddTransient<AboutViewModel>();
+        services.AddSingleton<AppOverlayViewModel>();
+
+        // spotlight
+        services.AddTransient<IAppSearchProvider, AppSearchProvider>();
+        services.AddTransient<IFileSearchProvider, WindowsSearchFileProvider>();
+        services.AddTransient<ISpotlightSearchService, SpotlightSearchService>();
+        services.AddSingleton<SpotlightService>();
+        services.AddSingleton<SpotlightWindow>();
+        services.AddSingleton<SpotlightViewModel>();
+        services.AddTransient<SpotlightSearchSettingsViewModel>();
+
+        return services.BuildServiceProvider();
+    }
+
+    private static bool SetupDatabases(this ServiceCollection services, bool isPortableMode)
+    {
+        BsonMapper.Global.EnumAsInteger = true;
+        BsonMapper.Global.RegisterType<DateOnly>(
+            serialize: d => d.ToString("yyyy-MM-dd"),
+            deserialize: bson => DateOnly.ParseExact(bson.AsString, "yyyy-MM-dd"));
+
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var mainDbPath = GetDbPath("settings.db");
+        var statsDbPath = GetDbPath("stats.db");
+
+        try
+        {
+            var mainDb = new LiteDatabase(new ConnectionString(mainDbPath) { Connection = ConnectionType.Direct });
+            services.AddSingleton(mainDb);
+
+            // stats db is lazy loaded so that when user has it disabled stats.db file will not appear until it's enabled again
+            services.AddSingleton(new StatsDbProvider(statsDbPath, () =>
+                new LiteDatabase(new ConnectionString(statsDbPath) { Connection = ConnectionType.Direct })));
+
+            return true;
+        }
+        catch (Exception)
+        {
+            new MessageBox
+            {
+                Title = "Database error",
+                Content = $"An error occurred while reading the settings.\nFile might be corrupted. Please remove it and start over.\n\nPath:\n{mainDbPath}",
+                CloseButtonIcon = new SymbolIcon(SymbolRegular.ErrorCircle24),
+                CloseButtonText = "Quit",
+                CloseButtonAppearance = ControlAppearance.Danger,
+            }.ShowSync();
+            return false;
+        }
+
+        string GetDbPath(string name)
+        {
+            return isPortableMode
+                ? Path.Combine(AppContext.BaseDirectory, name)
+                : Path.Combine(appData, "OmniSpot", name);
+        }
+    }
+
+    private static void AddImplementationsOf<TInterface>(this IServiceCollection services, ServiceLifetime lifetime,
+        bool registerAsConcreteType = false)
+    {
+        var interfaceType = typeof(TInterface);
+        var implementations = Assembly.GetExecutingAssembly().GetTypes()
+            .Where(t => interfaceType.IsAssignableFrom(t) && t is { IsClass: true, IsAbstract: false });
+
+        foreach (var implementation in implementations)
+        {
+            var serviceType = registerAsConcreteType ? implementation : interfaceType;
+            var serviceDescriptor = new ServiceDescriptor(serviceType, implementation, lifetime);
+
+            if (registerAsConcreteType)
+            {
+                services.TryAdd(serviceDescriptor);
+            }
+            else
+            {
+                // Allow multiple implementations for the same interface to be registered.
+                services.Add(serviceDescriptor);
+            }
+        }
+    }
+}

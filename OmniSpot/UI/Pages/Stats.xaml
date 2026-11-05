@@ -1,0 +1,157 @@
+<Page x:Class="OmniSpot.UI.Pages.Stats"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:designTime="clr-namespace:OmniSpot.UI.ViewModels.DesignTime"
+      xmlns:controls="clr-namespace:OmniSpot.UI.Controls"
+      mc:Ignorable="d"
+      Title="Stats"
+      ScrollViewer.CanContentScroll="False"
+      d:DataContext="{d:DesignInstance designTime:StatsSettingsViewModelDesignTime, IsDesignTimeCreatable=True}"
+      d:DesignWidth="700"
+      MinWidth="200"
+      ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
+      ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}" x:ClassModifier="internal">
+
+    <Page.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,14,0">
+        <StackPanel Margin="0,5,0,20">
+            <!-- Page header -->
+            <Grid Margin="2,0,0,7">
+                <ui:TextBlock Text="Statistics"
+                              FontTypography="BodyStrong"
+                              Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                              VerticalAlignment="Center" />
+                <ui:ProgressRing Width="18" Height="18"
+                              HorizontalAlignment="Right"
+                              IsIndeterminate="True"
+                              Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </Grid>
+            <Grid Margin="0,8,0,0">
+                <!-- Layer 1: blurred bento content -->
+                <StackPanel x:Name="BentoLayer">
+                    <!-- BlurEffect always present; radius is controlled entirely from code-behind -->
+                    <StackPanel.Effect>
+                        <BlurEffect Radius="0" RenderingBias="Quality" />
+                    </StackPanel.Effect>
+
+                    <controls:BentoDashboard></controls:BentoDashboard>
+
+                    <Grid Margin="0,20,0,0"
+
+                          VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left: Local Data Disclaimer -->
+                        <StackPanel Grid.Column="0"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Opacity="0.5">
+                            <ui:SymbolIcon Symbol="ShieldTask24" Margin="0,0,8,0" FontSize="16"/>
+                            <TextBlock FontSize="12"
+                                       VerticalAlignment="Center">
+                                All statistics are stored <Bold>locally</Bold> on this device.
+                            </TextBlock>
+                        </StackPanel>
+
+                        <!-- Right: Maintenance Buttons -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:Button Content="Reset All Statistics"
+                                       Icon="{ui:SymbolIcon Delete24}"
+                                       Appearance="Secondary"
+                                       Command="{Binding ResetStatsCommand}"
+                                       Margin="0,0,12,0"
+                                       Foreground="{DynamicResource SystemFillColorCriticalBrush}"/>
+
+                            <ui:Button Content="Disable Data Collection"
+                                       Appearance="Secondary"
+                                       Command="{Binding DisableStatsCommand}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+                <!-- End Layer 1 -->
+
+                <!-- Layer 2: Privacy Shield overlay; opacity + hit-test controlled from code-behind -->
+                <Grid x:Name="PrivacyOverlay"
+                      Opacity="0"
+                      IsHitTestVisible="False">
+
+                    <!-- Frosted-glass backdrop: Rectangle carries opacity so child content stays at 100% -->
+                    <Rectangle Fill="{DynamicResource ApplicationBackgroundBrush}" Opacity="0.3" />
+
+                    <!-- Shield content -->
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Margin="48,32">
+
+                        <ui:SymbolIcon Symbol="ShieldLock48"
+                                       FontSize="52"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource SystemAccentColorBrush}"
+                                       Margin="0,0,0,12" />
+
+                        <TextBlock Text="Privacy Shield"
+                                   FontSize="22"
+                                   FontWeight="Bold"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                   Margin="0,0,0,6" />
+
+                        <TextBlock Text="Usage statistics are off by default"
+                                   FontSize="13"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Margin="0,0,0,20" />
+
+                        <!-- Privacy Pledge card -->
+                        <Border CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource ControlElevationBorderBrush}"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                Padding="16,12"
+                                MaxWidth="380"
+                                Margin="0,0,0,20">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <ui:SymbolIcon Symbol="Checkmark16"
+                                                   Foreground="{DynamicResource SuccessGreenBrush}"
+                                                   Margin="0,0,8,0" />
+                                    <TextBlock Text="Privacy Pledge"
+                                               FontWeight="SemiBold"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBlock TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+                                    All usage data is stored <Bold>locally on your device</Bold> only.
+                                    Nothing is ever transmitted, sold, or shared.
+                                    You can disable collection at any time.
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <ui:Button Content="Enable Statistics"
+                                   Appearance="Primary"
+                                   HorizontalAlignment="Center"
+                                   Padding="24,8"
+                                   Command="{Binding EnableStatsCommand}" />
+
+                    </StackPanel>
+                </Grid>
+                <!-- End Layer 2 -->
+            </Grid>
+            <!-- End bento box wrapper -->
+        </StackPanel>
+    </ScrollViewer>
+</Page>
