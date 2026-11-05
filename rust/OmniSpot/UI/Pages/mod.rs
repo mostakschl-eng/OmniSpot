@@ -1,0 +1,12 @@
+#[path = "About.rs"]
+pub(crate) mod about;
+#[path = "Hotkeys.rs"]
+pub(crate) mod applications;
+#[path = "General.rs"]
+pub(crate) mod general;
+#[path = "Overlay.rs"]
+pub(crate) mod overlay;
+#[path = "SpotlightSearch.rs"]
+pub(crate) mod spotlight_search;
+#[path = "Stats.rs"]
+pub(crate) mod stats;

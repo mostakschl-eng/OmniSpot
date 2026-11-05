@@ -1,0 +1,10 @@
+#[path = "AboutViewModel.rs"]
+pub(crate) mod about;
+#[path = "Common/ApplicationShortcutViewModel.rs"]
+pub(crate) mod application_shortcut;
+#[path = "AppOverlayViewModel.rs"]
+pub(crate) mod overlay;
+#[path = "Common/SettingsState.rs"]
+pub(crate) mod settings_state;
+#[path = "SpotlightViewModel.rs"]
+pub(crate) mod spotlight;

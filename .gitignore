@@ -19,6 +19,7 @@
 
 /.opencode
 /OmniSpot/Inno_Files
+/rust/target/
 /website/docs
 
 
