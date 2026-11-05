@@ -12,11 +12,23 @@ internal class AppSearchProvider(
     IPackagedAppsService packagedAppsService,
     IAppRegistryCache appRegistryCache,
     IconExtractor iconExtractor,
+    ISpotlightUsageStore usageStore,
     SessionStats sessionStats,
     StatsRepository statsRepository,
     ILogger<AppSearchProvider> logger) : IAppSearchProvider
 {
     private const int MaxSearchResults = 25;
+    private static readonly (string Name, string Target, string? IconPath)[] WindowsTools =
+    [
+        ("Control Panel", Path.Combine(Environment.SystemDirectory, "control.exe"),
+            Path.Combine(Environment.SystemDirectory, "control.exe")),
+        ("Settings", "ms-settings:", Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Windows), "ImmersiveControlPanel", "SystemSettings.exe")),
+        ("File Explorer", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")),
+        ("Task Manager", Path.Combine(Environment.SystemDirectory, "Taskmgr.exe"),
+            Path.Combine(Environment.SystemDirectory, "Taskmgr.exe"))
+    ];
     private static readonly string[] StartMenuFolders =
     [
         Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
@@ -25,10 +37,18 @@ internal class AppSearchProvider(
 
     private readonly Lazy<IReadOnlyList<(string Name, string Path)>> _startMenuShortcuts =
         new(LoadStartMenuShortcuts, LazyThreadSafetyMode.ExecutionAndPublication);
+    private readonly Lazy<IReadOnlyDictionary<string, int>> _historicalUsageCounts =
+        new(() => LoadHistoricalUsageCounts(statsRepository), LazyThreadSafetyMode.ExecutionAndPublication);
     private readonly object _catalogLock = new();
     private Task<IReadOnlyList<(SearchResult Result, string AlternateName, string? IconPath)>>? _catalog;
     private Task<IReadOnlyList<(SearchResult Result, string AlternateName, string? IconPath)>>? _refreshCatalog;
     private DateTime _catalogCreatedAt;
+
+    public void WarmUp()
+    {
+        _ = GetCatalog();
+        _ = Task.Run(() => usageStore.GetBoost(string.Empty));
+    }
 
     public Task<IReadOnlyList<SearchResult>> GetSuggestedAppsAsync(CancellationToken cancellationToken = default)
     {
@@ -41,10 +61,32 @@ internal class AppSearchProvider(
         var suggestions = new List<SearchResult>();
         var seenTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        try
+        {
+            var frequentTargets = usageStore.GetFrequentTargets(10);
+            if (frequentTargets.Count > 0)
+            {
+                var catalog = GetCatalog().GetAwaiter().GetResult();
+                foreach (var target in frequentTargets)
+                {
+                    var match = catalog.FirstOrDefault(entry =>
+                        string.Equals(entry.Result.Target, target, StringComparison.OrdinalIgnoreCase));
+                    if (match.Result is not null && seenTargets.Add(match.Result.Target))
+                    {
+                        suggestions.Add(WithIcon(match.Result, match.IconPath));
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to load frequent Spotlight apps");
+        }
+
         var config = configurationManager.GetConfiguration();
         var configuredApps = config?.Applications ?? [];
         var usageCounts = sessionStats.GetUsageCounts();
-        var historicalUsageCounts = LoadHistoricalUsageCounts();
+        var historicalUsageCounts = _historicalUsageCounts.Value;
         var recentProcessNames = sessionStats.GetRecentProcessNames();
         var recentRanks = recentProcessNames
             .Select((processName, index) => (processName, index))
@@ -54,8 +96,14 @@ internal class AppSearchProvider(
         foreach (var app in configuredApps
             .OrderByDescending(app => recentRanks.GetValueOrDefault(app.ProcessName))
             .ThenByDescending(app => usageCounts.GetValueOrDefault(app.ProcessName) +
-                                     historicalUsageCounts.GetValueOrDefault(app.ProcessName)))
+                                     historicalUsageCounts.GetValueOrDefault(app.ProcessName))
+            .Take(10))
         {
+            if (suggestions.Count >= 10)
+            {
+                break;
+            }
+
             var displayName = appRegistryCache.GetDisplayName(app.ProcessName, app.ProcessPath);
             var icon = iconExtractor.GetByProcessPath(app.ProcessPath);
 
@@ -71,10 +119,15 @@ internal class AppSearchProvider(
             }
         }
 
+        if (suggestions.Count >= 10)
+        {
+            return suggestions.Take(10).ToList();
+        }
+
         try
         {
             var running = runningApplicationsService.GetRunningApplications(
-                configuredApps.Select(a => a.ProcessName));
+                configuredApps.Select(a => a.ProcessName), includeIcons: false);
 
             foreach (var app in running)
             {
@@ -90,7 +143,7 @@ internal class AppSearchProvider(
                         Subtitle: app.ProcessImagePath,
                         Target: app.ProcessImagePath,
                         Type: SearchResultType.App,
-                        Icon: app.Icon,
+                        Icon: iconExtractor.GetByProcessPath(app.ProcessImagePath),
                         Score: 80));
                 }
             }
@@ -110,6 +163,35 @@ internal class AppSearchProvider(
             return await GetSuggestedAppsAsync(cancellationToken);
         }
 
+        var catalog = GetCatalog();
+        var entries = await catalog.WaitAsync(cancellationToken);
+        var q = query.Trim();
+        return entries
+            .Select(entry => (entry.Result, entry.IconPath,
+                Score: CalculateScore(entry.Result.Title, entry.AlternateName, q)))
+            .Where(entry => entry.Score > 0)
+            .Select(entry => (entry.Result, entry.IconPath, entry.Score,
+                Boost: usageStore.GetBoost(entry.Result.Target)))
+            .OrderByDescending(entry => entry.Score + entry.Result.Score + entry.Boost)
+            .Take(MaxSearchResults)
+            .Select(entry => WithIcon(entry.Result with
+            {
+                Score = entry.Score + entry.Result.Score + entry.Boost
+            }, entry.IconPath))
+            .ToList();
+    }
+
+    private SearchResult WithIcon(SearchResult result, string? iconPath) => result with
+    {
+        Icon = iconPath is null ? null
+            : iconPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+              iconPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
+                ? iconExtractor.GetByProcessPath(iconPath)
+                : iconExtractor.GetByIconPath(iconPath)
+    };
+
+    private Task<IReadOnlyList<(SearchResult Result, string AlternateName, string? IconPath)>> GetCatalog()
+    {
         Task<IReadOnlyList<(SearchResult Result, string AlternateName, string? IconPath)>> catalog;
         lock (_catalogLock)
         {
@@ -134,27 +216,21 @@ internal class AppSearchProvider(
             catalog = _catalog;
         }
 
-        var entries = await catalog.WaitAsync(cancellationToken);
-        var q = query.Trim();
-        return entries
-            .Select(entry => (entry.Result, entry.IconPath, Score: CalculateScore(entry.Result.Title, entry.AlternateName, q)))
-            .Where(entry => entry.Score > 0)
-            .OrderByDescending(entry => entry.Score + entry.Result.Score)
-            .Take(MaxSearchResults)
-            .Select(entry => entry.Result with
-            {
-                Score = entry.Score + entry.Result.Score,
-                Icon = string.Equals(entry.Result.Subtitle, entry.IconPath, StringComparison.OrdinalIgnoreCase)
-                    ? iconExtractor.GetByProcessPath(entry.IconPath!)
-                    : iconExtractor.GetByIconPath(entry.IconPath)
-            })
-            .ToList();
+        return catalog;
     }
 
     private IReadOnlyList<(SearchResult Result, string AlternateName, string? IconPath)> BuildCatalog()
     {
         var results = new List<(SearchResult Result, string AlternateName, string? IconPath)>();
         var seenTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, target, iconPath) in WindowsTools)
+        {
+            seenTargets.Add(target);
+            seenNames.Add(name);
+            results.Add((new SearchResult(name, target, target, SearchResultType.App), name, iconPath));
+        }
 
         // 1. Configured applications
         var config = configurationManager.GetConfiguration();
@@ -201,7 +277,7 @@ internal class AppSearchProvider(
         {
             foreach (var shortcut in _startMenuShortcuts.Value)
             {
-                if (seenTargets.Add(shortcut.Path))
+                if (seenNames.Add(shortcut.Name) && seenTargets.Add(shortcut.Path))
                 {
                     results.Add((new SearchResult(
                         Title: shortcut.Name,
@@ -222,12 +298,12 @@ internal class AppSearchProvider(
         {
             foreach (var package in packagedAppsService.GetSearchableApps())
             {
-                if (seenTargets.Add(package.Path))
+                if (package.Aumid is not null && seenNames.Add(package.Name) && seenTargets.Add(package.Aumid))
                 {
                     results.Add((new SearchResult(
                         Title: package.Name,
                         Subtitle: package.Path,
-                        Target: package.Aumid ?? package.Path,
+                        Target: package.Aumid,
                         Type: SearchResultType.App,
                         Score: 0), package.Name, package.IconPath));
                 }
@@ -270,7 +346,7 @@ internal class AppSearchProvider(
         return shortcuts;
     }
 
-    private IReadOnlyDictionary<string, int> LoadHistoricalUsageCounts()
+    private static IReadOnlyDictionary<string, int> LoadHistoricalUsageCounts(StatsRepository statsRepository)
     {
         var usage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var bucket in statsRepository.GetAllHistoricBuckets())
@@ -288,6 +364,10 @@ internal class AppSearchProvider(
     {
         var normalizedQuery = Normalize(query);
         var displayScore = CalculateCandidateScore(displayName, normalizedQuery);
+        if (altName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            altName = altName[..^4];
+        }
         var alternateScore = CalculateCandidateScore(altName, normalizedQuery);
         return Math.Max(displayScore, alternateScore);
     }
@@ -310,19 +390,31 @@ internal class AppSearchProvider(
             return 90;
         }
 
+        var candidateTokens = normalizedCandidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (candidateTokens.Any(token => token.StartsWith(normalizedQuery, StringComparison.Ordinal)))
+        {
+            return 85;
+        }
+
         if (normalizedCandidate.Contains(normalizedQuery, StringComparison.Ordinal))
         {
             return 80;
         }
 
         var queryTokens = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var candidateTokens = normalizedCandidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (queryTokens.All(queryToken => candidateTokens.Any(candidateToken => candidateToken.StartsWith(queryToken, StringComparison.Ordinal))))
+        if (queryTokens.Length > 1 &&
+            queryTokens.All(queryToken => candidateTokens.Any(candidateToken => candidateToken.StartsWith(queryToken, StringComparison.Ordinal))))
         {
             return 72;
         }
 
-        return IsSubsequence(normalizedQuery, normalizedCandidate) ? 55 : 0;
+        var initials = string.Concat(candidateTokens.Select(token => token[0]));
+        if (initials.StartsWith(normalizedQuery, StringComparison.Ordinal))
+        {
+            return 68;
+        }
+
+        return normalizedQuery.Length >= 3 && IsSubsequence(normalizedQuery, normalizedCandidate) ? 45 : 0;
     }
 
     private static bool IsSubsequence(string query, string candidate)

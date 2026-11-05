@@ -16,12 +16,15 @@ internal partial class SpotlightViewModel : ObservableObject
     private string _query = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedPath))]
     private ObservableCollection<SearchResult> _suggestions = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedPath))]
     private ObservableCollection<SearchResult> _results = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedPath))]
     private int _selectedIndex = -1;
 
     [ObservableProperty]
@@ -31,12 +34,16 @@ internal partial class SpotlightViewModel : ObservableObject
     private bool _hasResults;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedPath))]
     private bool _showSuggestions = true;
 
     [ObservableProperty]
     private bool _showNoResults;
 
     public event Action? RequestClose;
+
+    public string SelectedPath =>
+        (ShowSuggestions ? Suggestions : Results).ElementAtOrDefault(SelectedIndex)?.Subtitle ?? string.Empty;
 
     public SpotlightViewModel(ISpotlightSearchService searchService)
     {
@@ -63,6 +70,10 @@ internal partial class SpotlightViewModel : ObservableObject
         {
             var suggestions = await _searchService.GetSuggestionsAsync();
             Suggestions = new ObservableCollection<SearchResult>(suggestions);
+            if (ShowSuggestions)
+            {
+                SelectedIndex = Suggestions.Count > 0 ? 0 : -1;
+            }
         }
         catch
         {
@@ -94,7 +105,7 @@ internal partial class SpotlightViewModel : ObservableObject
         try
         {
             // Debounce 60ms
-            await Task.Delay(60, ct);
+            await Task.Delay(25, ct);
 
             await _searchService.SearchProgressivelyAsync(value, items =>
             {
@@ -148,11 +159,15 @@ internal partial class SpotlightViewModel : ObservableObject
         RequestClose?.Invoke();
     }
 
-    private static void LaunchTarget(SearchResult item)
+    private void LaunchTarget(SearchResult item)
     {
         try
         {
-            if (item.Type == SearchResultType.App && !item.Target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !File.Exists(item.Target))
+            if (item.Type == SearchResultType.App && item.Target.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase))
+            {
+                Process.Start(new ProcessStartInfo { FileName = item.Target, UseShellExecute = true });
+            }
+            else if (item.Type == SearchResultType.App && !item.Target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !File.Exists(item.Target))
             {
                 Process.Start("explorer.exe", $"shell:AppsFolder\\{item.Target}");
             }
@@ -164,6 +179,8 @@ internal partial class SpotlightViewModel : ObservableObject
                     UseShellExecute = true
                 });
             }
+
+            _searchService.RecordLaunch(item);
         }
         catch
         {

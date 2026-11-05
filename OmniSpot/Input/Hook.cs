@@ -31,6 +31,7 @@ internal class Hook(
     private readonly KeyboardHook _hook = new();
     private readonly KeyStateMachine _stateMachine = new();
     private AppConfig? _config;
+    private bool? _overlayPreviewEnabled;
     private readonly HashSet<Key> _suppressedLetterKeys = [];
     private readonly HashSet<Key> _suppressedDigitKeys = [];
     private readonly HashSet<Key> _passthroughLetterKeys = [];
@@ -46,7 +47,7 @@ internal class Hook(
     {
         _config = config;
         _stateMachine.Configure(config.Modifier, config.SpotlightModifier, config.SpotlightEnabled);
-        overlayShowTimer.Configure(onExpired: () => overlayService.Show(config.Applications, config.DynamicModeEnabled), config.OverlayShowDelayMs);
+        overlayShowTimer.Configure(ShowOverlayIfEnabled, config.OverlayShowDelayMs);
         logger.LogInformation("Starting hook");
         _hook.KeyboardPressed += Hook_KeyboardPressed;
     }
@@ -66,10 +67,21 @@ internal class Hook(
     public void UpdateConfiguration(AppConfig config)
     {
         _config = config;
+        _overlayPreviewEnabled = null;
         _stateMachine.Configure(config.Modifier, config.SpotlightModifier, config.SpotlightEnabled);
-        overlayShowTimer.Configure(onExpired: () => overlayService.Show(config.Applications, config.DynamicModeEnabled), config.OverlayShowDelayMs);
+        overlayShowTimer.Configure(ShowOverlayIfEnabled, config.OverlayShowDelayMs);
         // Reset state when configuration changes (especially if modifier key changes)
         ResetModifierState();
+    }
+
+    public void SetOverlayPreviewEnabled(bool enabled)
+    {
+        _overlayPreviewEnabled = enabled;
+        if (!enabled)
+        {
+            overlayShowTimer.Cancel();
+            overlayService.Hide();
+        }
     }
 
     private void Hook_KeyboardPressed(object? sender, KeyboardHookEventArgs e)
@@ -112,7 +124,7 @@ internal class Hook(
                     SuppressModifier(e);
                 }
 
-                if (t.IsFirstPress && _config!.OverlayEnabled)
+                if (t.IsFirstPress && IsOverlayEnabled)
                 {
                     overlayShowTimer.Start();
                 }
@@ -376,7 +388,7 @@ internal class Hook(
     {
         ArgumentNullException.ThrowIfNull(_config);
 
-        if (_config.OverlayKeepOpenWhileModifierHeld && overlayService.IsVisible)
+        if (IsOverlayEnabled && _config.OverlayKeepOpenWhileModifierHeld && overlayService.IsVisible)
         {
             overlayService.Show(_config.Applications, _config.DynamicModeEnabled);
         }
@@ -385,6 +397,16 @@ internal class Hook(
             overlayService.Hide();
         }
     }
+
+    private void ShowOverlayIfEnabled()
+    {
+        if (IsOverlayEnabled && _config is { } config && _stateMachine.IsModifierHeld)
+        {
+            overlayService.Show(config.Applications, config.DynamicModeEnabled);
+        }
+    }
+
+    private bool IsOverlayEnabled => (_overlayPreviewEnabled ?? _config?.OverlayEnabled) == true;
 
     // Inverse of AppOverlayService.IndexToKey: D1→0, D2→1, …, D9→8, D0→9
     private static int DigitKeyToIndex(Key key) => key == Key.D0 ? 9 : key - Key.D1;

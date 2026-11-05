@@ -22,9 +22,14 @@ internal class PackagedAppsService(ILogger<PackagedAppsService> logger) : IPacka
             {
                 var app = GetPackagedAppInfo(package);
                 return (Name: package.DisplayName, Path: package.InstalledPath,
-                    Aumid: app?.Aumid, IconPath: app?.IconPath);
+                    Aumid: app?.Aumid, IconPath: app?.IconPath,
+                    FamilyName: package.Id.FamilyName, PackageName: package.Id.Name);
             })
-            .Where(app => !string.IsNullOrWhiteSpace(app.Name))
+            .Where(app => !string.IsNullOrWhiteSpace(app.Name) && app.Aumid is not null &&
+                          !app.Name.StartsWith("ms-resource:", StringComparison.OrdinalIgnoreCase) &&
+                          !app.Name.Equals(app.FamilyName, StringComparison.OrdinalIgnoreCase) &&
+                          !app.Name.Equals(app.PackageName, StringComparison.OrdinalIgnoreCase))
+            .Select(app => (app.Name, app.Path, app.Aumid, app.IconPath))
             .ToList();
 
     public InstalledPackages GetInstalledPackages()

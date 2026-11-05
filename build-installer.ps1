@@ -41,9 +41,10 @@ function Build-Package {
     )
 
     $pubxml = if ($Profile -eq "folder") { "FolderProfile" } else { "SelfContainedProfile" }
+    $publishFolder = "package-$Profile"
 
     Write-Host "`n>>> Publishing OmniSpot with profile: $pubxml (Version: $Ver) ..." -ForegroundColor Green
-    dotnet publish OmniSpot/OmniSpot.csproj -p:PublishProfile=$pubxml -c Release
+    dotnet publish OmniSpot/OmniSpot.csproj -p:PublishProfile=$pubxml -p:PublishDir="bin/publish/$publishFolder/" -c Release
     if ($LASTEXITCODE -ne 0) {
         Write-Error "dotnet publish failed for profile $pubxml"
         exit $LASTEXITCODE
@@ -52,7 +53,7 @@ function Build-Package {
     Write-Host "`n>>> Compiling Inno Setup installer for profile: $Profile ..." -ForegroundColor Green
     Push-Location OmniSpot
     try {
-        & $isccPath /DAppVersion="$Ver" /DProfileName="$Profile" installer.iss
+        & $isccPath /DAppVersion="$Ver" /DProfileName="$Profile" /DPublishFolder="$publishFolder" installer.iss
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Inno Setup compilation failed for profile $Profile"
             exit $LASTEXITCODE

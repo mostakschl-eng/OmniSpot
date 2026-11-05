@@ -22,6 +22,10 @@
                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                           Margin="2,0,0,7" />
 
+            <ui:TextBlock Text="The overlay switch previews immediately. Save &amp; Apply keeps your choice."
+                          Appearance="Secondary"
+                          Margin="2,0,0,4" />
+
             <ui:CardControl Margin="0,8,0,4"
                             Padding="20,10,20,10"
                             Icon="{ui:SymbolIcon LayerDiagonal20}">

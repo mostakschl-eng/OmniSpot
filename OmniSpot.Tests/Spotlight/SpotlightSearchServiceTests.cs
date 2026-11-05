@@ -11,6 +11,7 @@ public class SpotlightSearchServiceTests
 {
     private readonly IAppSearchProvider _appProvider = Substitute.For<IAppSearchProvider>();
     private readonly IFileSearchProvider _fileProvider = Substitute.For<IFileSearchProvider>();
+    private readonly ISpotlightUsageStore _usageStore = Substitute.For<ISpotlightUsageStore>();
     private readonly SpotlightSearchService _sut;
 
     public SpotlightSearchServiceTests()
@@ -18,6 +19,7 @@ public class SpotlightSearchServiceTests
         _sut = new SpotlightSearchService(
             _appProvider,
             _fileProvider,
+            _usageStore,
             NullLogger<SpotlightSearchService>.Instance);
     }
 
@@ -134,5 +136,55 @@ public class SpotlightSearchServiceTests
         pendingFiles.SetResult([file]);
         await search;
         updates.Last().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task SearchAsync_SkipsFileProvider_ForSingleLetter()
+    {
+        // Act
+        await _sut.SearchAsync("c", TestContext.Current.CancellationToken);
+
+        // Assert
+        _ = _fileProvider.DidNotReceiveWithAnyArgs().SearchFilesAsync(default!, default, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SearchProgressivelyAsync_UpdatesOnce_ForSingleLetter()
+    {
+        // Arrange
+        var updates = 0;
+        _appProvider.SearchAppsAsync("c", Arg.Any<CancellationToken>()).Returns([]);
+
+        // Act
+        await _sut.SearchProgressivelyAsync("c", _ => updates++, TestContext.Current.CancellationToken);
+
+        // Assert
+        updates.Should().Be(1);
+    }
+
+    [Fact]
+    public void RecordLaunch_StoresSelectedTarget()
+    {
+        // Arrange
+        var result = new SearchResult("Control Panel", "control.exe", "control.exe", SearchResultType.App);
+
+        // Act
+        _sut.RecordLaunch(result);
+
+        // Assert
+        _usageStore.Received(1).RecordLaunch("control.exe");
+    }
+
+    [Fact]
+    public void RecordLaunch_DoesNotStoreFileTarget()
+    {
+        // Arrange
+        var result = new SearchResult("document", "C:\\document.txt", "C:\\document.txt", SearchResultType.File);
+
+        // Act
+        _sut.RecordLaunch(result);
+
+        // Assert
+        _usageStore.DidNotReceiveWithAnyArgs().RecordLaunch(default!);
     }
 }

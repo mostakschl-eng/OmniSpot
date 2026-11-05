@@ -52,6 +52,10 @@ internal partial class Settings
             {
                 e.Cancel = true;
             }
+            else
+            {
+                _viewModel.State.LoadConfiguration();
+            }
         }
     }
 }

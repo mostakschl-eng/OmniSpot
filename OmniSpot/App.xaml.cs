@@ -5,8 +5,10 @@ using OmniSpot.CLI;
 using OmniSpot.Configuration;
 using OmniSpot.Extensions;
 using OmniSpot.Input;
+using OmniSpot.Spotlight;
 using OmniSpot.Stats;
 using OmniSpot.UI.Windows;
+using OmniSpot.UI.ViewModels.Common;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -109,6 +111,15 @@ public partial class App
 
         _hook = _serviceProvider.GetRequiredService<Hook>();
         _hook.Start(config);
+        var settingsState = _serviceProvider.GetRequiredService<ISettingsState>();
+        settingsState.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ISettingsState.OverlayEnabled))
+            {
+                _hook?.SetOverlayPreviewEnabled(settingsState.OverlayEnabled);
+            }
+        };
+        _serviceProvider.GetRequiredService<IAppSearchProvider>().WarmUp();
 
         _statsService = _serviceProvider.GetRequiredService<StatsService>();
         _statsService.Start(config.StatsEnabled);

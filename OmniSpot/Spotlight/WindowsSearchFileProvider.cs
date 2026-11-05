@@ -42,6 +42,8 @@ internal class WindowsSearchFileProvider(
             var sql = $"SELECT TOP {maxResults} System.ItemName, System.ItemUrl, System.ItemPathDisplay " +
                       $"FROM SystemIndex " +
                       $"WHERE SCOPE='file:' AND {string.Join(" AND ", nameConditions)} " +
+                      "AND System.ItemName NOT LIKE '%.dll' AND System.ItemName NOT LIKE '%.exe' " +
+                      "AND System.ItemName NOT LIKE '%.sys' AND System.ItemName NOT LIKE '%.pdb' " +
                       "ORDER BY System.Search.Rank DESC";
 
             try

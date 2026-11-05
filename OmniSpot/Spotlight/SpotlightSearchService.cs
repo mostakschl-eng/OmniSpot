@@ -5,8 +5,16 @@ namespace OmniSpot.Spotlight;
 internal class SpotlightSearchService(
     IAppSearchProvider appSearchProvider,
     IFileSearchProvider fileSearchProvider,
+    ISpotlightUsageStore usageStore,
     ILogger<SpotlightSearchService> logger) : ISpotlightSearchService
 {
+    public void RecordLaunch(SearchResult result)
+    {
+        if (result.Type == SearchResultType.App)
+        {
+            usageStore.RecordLaunch(result.Target);
+        }
+    }
     public async Task<IReadOnlyList<SearchResult>> GetSuggestionsAsync(CancellationToken cancellationToken = default)
     {
         return await appSearchProvider.GetSuggestedAppsAsync(cancellationToken);
@@ -23,6 +31,11 @@ internal class SpotlightSearchService(
 
         var files = await fileTask;
         cancellationToken.ThrowIfCancellationRequested();
+        if (files.Count == 0)
+        {
+            return;
+        }
+
         var seen = apps.Select(app => app.Target).ToHashSet(StringComparer.OrdinalIgnoreCase);
         onResults([.. apps, .. files.Where(file => seen.Add(file.Target))]);
     }
@@ -84,6 +97,11 @@ internal class SpotlightSearchService(
 
     private async Task<IReadOnlyList<SearchResult>> SearchFilesSafelyAsync(string query, CancellationToken cancellationToken)
     {
+        if (query.Length < 2)
+        {
+            return [];
+        }
+
         try
         {
             return await fileSearchProvider.SearchFilesAsync(query, 15, cancellationToken);

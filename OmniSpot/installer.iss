@@ -1,6 +1,9 @@
 #ifndef ProfileName
   #define ProfileName "folder"
 #endif
+#ifndef PublishFolder
+  #define PublishFolder ProfileName
+#endif
 
 [Setup]
 AppId=7954d19d-b9c7-42b4-882b-0c03e632e75f
@@ -27,7 +30,7 @@ RestartApplications=yes
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "bin\publish\{#ProfileName}\*"; DestDir: "{app}"; Excludes: ".portable"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "bin\publish\{#PublishFolder}\*"; DestDir: "{app}"; Excludes: ".portable,*.db,*.db-*,logs\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Dirs]
 Name: "{userappdata}\OmniSpot"; Flags: uninsneveruninstall

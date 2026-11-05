@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using OmniSpot.Spotlight;
@@ -10,12 +9,12 @@ using OmniSpot.UI.ViewModels;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.Input.KeyboardAndMouse;
-using Wpf.Ui.Appearance;
+using Wpf.Ui.Controls;
 using Forms = System.Windows.Forms;
 
 namespace OmniSpot.UI.Windows;
 
-internal partial class SpotlightWindow : Window
+internal partial class SpotlightWindow : FluentWindow
 {
     private readonly SpotlightViewModel _viewModel;
     private readonly DispatcherTimer _foregroundTimer;
@@ -34,7 +33,6 @@ internal partial class SpotlightWindow : Window
         Closed += OnClosed;
         PreviewKeyDown += OnPreviewKeyDown;
 
-        ApplicationThemeManager.Changed += OnThemeChanged;
     }
 
     public void FocusSearchBox()
@@ -88,25 +86,12 @@ internal partial class SpotlightWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyShadowForTheme();
         PositionWindow();
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
         _foregroundTimer.Stop();
-        ApplicationThemeManager.Changed -= OnThemeChanged;
-    }
-
-    private void OnThemeChanged(ApplicationTheme theme, System.Windows.Media.Color _) => ApplyShadowForTheme();
-
-    private void ApplyShadowForTheme()
-    {
-        var isDark = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Dark;
-
-        CardBorder.Effect = isDark
-            ? new DropShadowEffect { BlurRadius = 24, ShadowDepth = 0, Opacity = 0.25, Color = Colors.White }
-            : new DropShadowEffect { BlurRadius = 28, ShadowDepth = 8, Direction = 270, Opacity = 0.4, Color = Colors.Black };
     }
 
     private void PositionWindow()

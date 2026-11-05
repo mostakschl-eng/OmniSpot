@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using NSubstitute;
 using OmniSpot.Spotlight;
 using OmniSpot.UI.ViewModels;
+using System.Collections.ObjectModel;
 using Xunit;
 
 namespace OmniSpot.Tests.UI.ViewModels;
@@ -34,6 +35,7 @@ public class SpotlightViewModelTests
         _sut.Query.Should().BeEmpty();
         _sut.ShowSuggestions.Should().BeTrue();
         _sut.Suggestions.Should().HaveCount(1);
+        _sut.SelectedIndex.Should().Be(0);
     }
 
     [Fact]
@@ -88,6 +90,22 @@ public class SpotlightViewModelTests
 
         _sut.MoveSelection(-1); // Wrap to 2
         _sut.SelectedIndex.Should().Be(2);
+    }
+
+    [Fact]
+    public void MoveSelection_NavigatesSuggestionsAsList()
+    {
+        // Arrange
+        _sut.Suggestions = new ObservableCollection<SearchResult>(Enumerable.Range(0, 10)
+            .Select(index => new SearchResult($"App {index}", $"Path {index}", $"Path {index}", SearchResultType.App)));
+        _sut.SelectedIndex = 1;
+
+        // Act
+        _sut.MoveSelection(1);
+
+        // Assert
+        _sut.SelectedIndex.Should().Be(2);
+        _sut.SelectedPath.Should().Be("Path 2");
     }
 
     [Fact]
