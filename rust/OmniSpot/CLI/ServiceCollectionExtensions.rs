@@ -24,6 +24,13 @@ pub(crate) fn cli_builder() -> CliBuilder {
         })
         .add_flag_option("--trace", "Enable trace logging", |options| {
             options.enable_trace_logging = true
-        });
+        })
+        .add_valued_option(
+            "--import-legacy",
+            "Import a validated C# LiteDB export",
+            |options, path| {
+                options.import_legacy = Some(path.to_string());
+            },
+        );
     builder
 }

@@ -10,14 +10,14 @@ use crate::{
     switcher::Switcher,
     window_discovery::AppRegistryCache,
 };
+use async_channel::Sender as EventSender;
 use std::{
     collections::HashSet,
     sync::{
         Arc, Mutex, RwLock,
-        atomic::{AtomicU32, Ordering},
-        mpsc::Sender,
+        atomic::{AtomicBool, AtomicU32, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::SetForegroundWindow};
 
@@ -28,11 +28,14 @@ pub struct InputController {
     suppressed_letters: HashSet<Key>,
     suppressed_digits: HashSet<Key>,
     passthrough_letters: HashSet<Key>,
-    events: Option<Sender<InputEvent>>,
-    action_started_at: Option<Instant>,
-    overlay_cancel: Option<Sender<()>>,
+    events: Option<EventSender<InputEvent>>,
+    overlay_cancel: Option<std::sync::mpsc::Sender<()>>,
     peeker: Peeker,
     app_registry: AppRegistryCache,
+    warning_service: crate::overlay::warning_overlay_service::WarningOverlayService,
+    overlay_visible: Arc<AtomicBool>,
+    overlay_preview_enabled: Option<bool>,
+    previous_letter_released_at: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,22 +68,37 @@ pub enum InputEvent {
     },
     OverlayShow,
     OverlayHide,
+    WarningShow(crate::overlay::warning_content::WarningContent),
+    WarningHide,
+    DismissWarning,
+    OverlayPreview(bool),
 }
 
 impl InputController {
-    pub fn new(configuration: Configuration) -> Arc<Mutex<Self>> {
-        Self::new_with_events(configuration, None)
-    }
-
     pub fn new_with_events(
         configuration: Configuration,
-        events: Option<Sender<InputEvent>>,
+        events: Option<EventSender<InputEvent>>,
+        app_registry: AppRegistryCache,
     ) -> Arc<Mutex<Self>> {
         let mut state_machine = KeyStateMachine::default();
         state_machine.configure(
             configuration.modifier,
             configuration.spotlight_modifier,
             configuration.spotlight_enabled,
+        );
+        let show_events = events.clone();
+        let hide_events = events.clone();
+        let warning_service = crate::overlay::warning_overlay_service::WarningOverlayService::new(
+            move |content| {
+                if let Some(events) = &show_events {
+                    let _ = events.try_send(InputEvent::WarningShow(content));
+                }
+            },
+            move || {
+                if let Some(events) = &hide_events {
+                    let _ = events.try_send(InputEvent::WarningHide);
+                }
+            },
         );
         Arc::new(Mutex::new(Self {
             configuration: Arc::new(RwLock::new(configuration)),
@@ -90,10 +108,13 @@ impl InputController {
             suppressed_digits: HashSet::new(),
             passthrough_letters: HashSet::new(),
             events,
-            action_started_at: None,
             overlay_cancel: None,
             peeker: Peeker::default(),
-            app_registry: AppRegistryCache::for_user(),
+            app_registry,
+            warning_service,
+            overlay_visible: Arc::new(AtomicBool::new(false)),
+            overlay_preview_enabled: None,
+            previous_letter_released_at: None,
         }))
     }
     pub fn update_configuration(&mut self, configuration: Configuration) {
@@ -106,9 +127,22 @@ impl InputController {
             .configuration
             .write()
             .expect("configuration lock poisoned") = configuration;
+        self.overlay_preview_enabled = None;
         self.reset();
     }
+    pub fn dismiss_warning(&mut self) {
+        self.warning_service.dismiss();
+    }
+    pub fn set_overlay_preview_enabled(&mut self, enabled: bool) {
+        self.overlay_preview_enabled = Some(enabled);
+        if !enabled {
+            self.cancel_overlay();
+        }
+    }
     pub fn handle_event(&mut self, key: Key, is_down: bool, injected: bool) -> bool {
+        crate::logging::trace(format!(
+            "Key event {key:?}, down={is_down}, injected={injected}"
+        ));
         if injected {
             return false;
         }
@@ -133,7 +167,7 @@ impl InputController {
             KeyTransition::DigitKeyPressed(digit) => self.handle_digit(digit),
             KeyTransition::SpotlightShortcutPressed => {
                 if let Some(events) = &self.events {
-                    let _ = events.send(InputEvent::OpenSpotlight);
+                    let _ = events.try_send(InputEvent::OpenSpotlight);
                 }
                 true
             }
@@ -160,15 +194,19 @@ impl InputController {
         match self.state_machine.process_key_up(key) {
             KeyTransition::AltTabSwitched { nav_count } => {
                 if let Some(events) = &self.events {
-                    let _ = events.send(InputEvent::AltTab { count: nav_count });
+                    let _ = events.try_send(InputEvent::AltTab { count: nav_count });
                 }
                 false
             }
             KeyTransition::ModifierReleasedClean {
+                held_duration_ms,
                 has_side_effect: true,
-                ..
             } => {
+                let was_overlay_visible = self.overlay_visible.load(Ordering::SeqCst);
                 self.cancel_overlay();
+                if !was_overlay_visible && held_duration_ms <= 200 {
+                    let _ = keyboard_input::send_synthetic_key_down_up(key);
+                }
                 true
             }
             KeyTransition::ModifierReleasedAfterAction {
@@ -201,48 +239,66 @@ impl InputController {
         }
         if !matching.is_empty() {
             self.suppressed_letters.insert(letter);
-            let choices = self.switcher.windows.get_cached_windows().len() as i32;
-            self.action_started_at = Some(Instant::now());
+            let choices = self.switcher.windows.get_total_choices_count() as i32;
             let previous_handle = self
                 .switcher
                 .windows
                 .get_current_window()
                 .map(|window| window.handle);
-            if let Some(result) = self.switcher.execute(&matching) {
-                if config.peek_enabled {
-                    if let (Some(previous_handle), Some(target_handle)) =
+            if let Some(result) = self
+                .switcher
+                .execute(&matching, config.pulse_border_enabled)
+            {
+                if config.peek_enabled
+                    && let (Some(previous_handle), Some(target_handle)) =
                         (previous_handle, result.handle)
-                    {
-                        if previous_handle != target_handle {
-                            self.peeker.arm(
-                                previous_handle,
-                                target_handle,
-                                result.process_path.clone(),
-                                self.switcher
-                                    .windows
-                                    .get_all_windows()
-                                    .into_iter()
-                                    .find(|window| window.handle == target_handle)
-                                    .map(|window| window.is_minimized)
-                                    .unwrap_or(false),
-                                dynamic,
-                            );
-                        }
-                    }
+                    && previous_handle != target_handle
+                {
+                    self.peeker.arm(
+                        previous_handle,
+                        target_handle,
+                        result.process_path.clone(),
+                        self.switcher
+                            .windows
+                            .get_all_windows()
+                            .into_iter()
+                            .find(|window| window.handle == target_handle)
+                            .map(|window| window.is_minimized)
+                            .unwrap_or(false),
+                        dynamic,
+                    );
                 }
-                if let Some(events) = &self.events {
+                if !result.was_started
+                    && let Some(events) = &self.events
+                {
                     let duration_ms = self
-                        .action_started_at
-                        .take()
+                        .state_machine
+                        .modifier_pressed_at()
                         .map(|started| started.elapsed().as_millis() as i32)
                         .unwrap_or_default();
-                    let _ = events.send(InputEvent::Switch {
-                        process: result.process_path,
+                    let _ = events.try_send(InputEvent::Switch {
+                        process: result.process_path.clone(),
                         duration_ms,
                         choices,
                         dynamic,
                         key: letter,
                     });
+                }
+                if result.needs_elevation {
+                    self.reset();
+                    self.warning_service
+                        .show(crate::overlay::warning_content::WarningContent::Elevated);
+                } else if result
+                    .process_path
+                    .rsplit(['\\', '/'])
+                    .next()
+                    .is_some_and(|name| {
+                        name.eq_ignore_ascii_case("WindowsSandboxRemoteSession.exe")
+                    })
+                {
+                    self.reset();
+                    self.warning_service
+                        .show(crate::overlay::warning_content::WarningContent::KeyEventsStealing);
                 }
             }
             return true;
@@ -272,15 +328,39 @@ impl InputController {
             Key::D0 => 9,
             _ => return false,
         };
-        let mut windows = self.switcher.windows.get_windows();
-        windows.sort_by_key(|window| window.handle);
-        if let Some(window) = windows.get(index) {
-            self.suppressed_digits.insert(digit);
-            activate_window(window.handle);
-            true
-        } else {
-            false
+        let windows = self.switcher.windows.get_windows();
+        let focused_windows = self
+            .switcher
+            .windows
+            .get_focused_app_windows(&windows, &config.applications);
+        let Some(window) = focused_windows.get(index) else {
+            return false;
+        };
+        self.suppressed_digits.insert(digit);
+        if self
+            .switcher
+            .windows
+            .get_current_window()
+            .is_some_and(|current| current.handle == window.handle)
+        {
+            return true;
         }
+        let duration_ms = self
+            .state_machine
+            .modifier_pressed_at()
+            .map(|started| started.elapsed().as_millis() as i32)
+            .unwrap_or_default();
+        activate_window(window.handle);
+        if let Some(events) = &self.events {
+            let _ = events.try_send(InputEvent::Switch {
+                process: window.process_image_path.clone(),
+                duration_ms,
+                choices: self.switcher.windows.get_total_choices_count() as i32,
+                dynamic: false,
+                key: digit,
+            });
+        }
+        true
     }
     fn reset(&mut self) {
         self.cancel_overlay();
@@ -300,7 +380,7 @@ impl InputController {
             Switcher::hide_handle(result.target_handle);
         }
         if let Some(events) = &self.events {
-            let _ = events.send(InputEvent::Peek {
+            let _ = events.try_send(InputEvent::Peek {
                 process: result.target_process,
                 duration_ms: result.armed_at.elapsed().as_millis() as i32,
                 dynamic: result.dynamic,
@@ -314,17 +394,22 @@ impl InputController {
             .read()
             .expect("configuration lock poisoned")
             .clone();
-        if !config.overlay_enabled {
+        if !self
+            .overlay_preview_enabled
+            .unwrap_or(config.overlay_enabled)
+        {
             return;
         }
         self.cancel_overlay();
         let (sender, receiver) = std::sync::mpsc::channel();
         let events = self.events.clone();
+        let overlay_visible = Arc::clone(&self.overlay_visible);
         let delay = Duration::from_millis(config.overlay_show_delay_ms as u64);
         std::thread::spawn(move || {
             if receiver.recv_timeout(delay).is_err() {
+                overlay_visible.store(true, Ordering::SeqCst);
                 if let Some(events) = events {
-                    let _ = events.send(InputEvent::OverlayShow);
+                    let _ = events.try_send(InputEvent::OverlayShow);
                 }
             }
         });
@@ -332,10 +417,11 @@ impl InputController {
     }
 
     fn cancel_overlay(&mut self) {
+        self.overlay_visible.store(false, Ordering::SeqCst);
         if let Some(sender) = self.overlay_cancel.take() {
             let _ = sender.send(());
             if let Some(events) = &self.events {
-                let _ = events.send(InputEvent::OverlayHide);
+                let _ = events.try_send(InputEvent::OverlayHide);
             }
         }
     }
@@ -358,9 +444,6 @@ impl InputHook {
     }
     pub fn pump(&self) -> Result<(), String> {
         self.hook.pump()
-    }
-    pub fn stop(&self) {
-        self.hook.stop();
     }
     pub fn spawn(controller: Arc<Mutex<InputController>>) -> InputThread {
         let thread_id = Arc::new(AtomicU32::new(0));
@@ -405,6 +488,6 @@ fn configured_apps(config: &Configuration, key: Key) -> Vec<ApplicationConfigura
 }
 fn activate_window(handle: isize) {
     unsafe {
-        SetForegroundWindow(HWND(handle as *mut std::ffi::c_void));
+        let _ = SetForegroundWindow(HWND(handle as *mut std::ffi::c_void));
     }
 }

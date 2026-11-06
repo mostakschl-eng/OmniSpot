@@ -28,7 +28,7 @@ impl SpotlightUsageStore {
     }
     pub fn get_frequent_targets(&self, max_count: usize) -> Vec<String> {
         let mut values = self.loaded().into_iter().collect::<Vec<_>>();
-        values.sort_by(|left, right| right.1.cmp(&left.1));
+        values.sort_by_key(|value| std::cmp::Reverse(value.1));
         values
             .into_iter()
             .take(max_count)
@@ -47,10 +47,7 @@ impl SpotlightUsageStore {
             counts: counts.clone(),
         })
         .map_err(|error| error.to_string())?;
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-        fs::write(&self.path, text).map_err(|error| error.to_string())
+        crate::atomic_file::write(&self.path, text.as_bytes()).map_err(|error| error.to_string())
     }
     fn loaded(&self) -> HashMap<String, i32> {
         self.counts
@@ -64,6 +61,22 @@ fn read_counts(path: &PathBuf) -> HashMap<String, i32> {
         .ok()
         .and_then(|text| serde_json::from_str::<UsageDocument>(&text).ok())
         .map(|document| document.counts)
+        .or_else(|| {
+            path.parent()
+                .and_then(|directory| {
+                    crate::legacy_import::profile_bundle(directory)
+                        .ok()
+                        .flatten()
+                })
+                .map(|bundle| {
+                    bundle
+                        .spotlight_usage
+                        .counts
+                        .iter()
+                        .map(|(key, count)| (key.clone(), *count))
+                        .collect()
+                })
+        })
         .unwrap_or_default()
 }
 

@@ -5,7 +5,9 @@ use crate::{
 use std::{path::Path, process::Command};
 use windows::Win32::{
     Foundation::HWND,
+    Graphics::Dwm::{DWMWA_BORDER_COLOR, DwmSetWindowAttribute},
     System::Threading::AttachThreadInput,
+    UI::Input::KeyboardAndMouse::{INPUT, INPUT_0, INPUT_MOUSE, MOUSEINPUT, SendInput},
     UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId, IsIconic, SW_MINIMIZE, SW_RESTORE,
         SetForegroundWindow, ShowWindow, SwitchToThisWindow,
@@ -14,23 +16,16 @@ use windows::Win32::{
 
 #[derive(Debug, Clone)]
 pub struct AppSwitchResult {
-    pub process_id: Option<u32>,
     pub process_path: String,
     pub handle: Option<isize>,
     pub was_started: bool,
+    pub needs_elevation: bool,
 }
 
+#[derive(Default)]
 pub struct Switcher {
     pub windows: WindowEnumerator,
     next_windows: Vec<isize>,
-}
-impl Default for Switcher {
-    fn default() -> Self {
-        Self {
-            windows: WindowEnumerator::default(),
-            next_windows: Vec::new(),
-        }
-    }
 }
 
 impl Switcher {
@@ -41,7 +36,7 @@ impl Switcher {
             .into_iter()
             .find(|window| window.handle == handle)
         {
-            activate(&window);
+            activate(&window, false);
         }
     }
 
@@ -49,7 +44,11 @@ impl Switcher {
         hide(handle);
     }
 
-    pub fn execute(&mut self, group: &[ApplicationConfiguration]) -> Option<AppSwitchResult> {
+    pub fn execute(
+        &mut self,
+        group: &[ApplicationConfiguration],
+        pulse_border: bool,
+    ) -> Option<AppSwitchResult> {
         if group.is_empty() {
             return None;
         }
@@ -69,9 +68,14 @@ impl Switcher {
             } else {
                 (index.wrapping_add(1)) % group.len()
             }],
+            pulse_border,
         )
     }
-    fn execute_one(&mut self, app: &ApplicationConfiguration) -> Option<AppSwitchResult> {
+    fn execute_one(
+        &mut self,
+        app: &ApplicationConfiguration,
+        pulse_border: bool,
+    ) -> Option<AppSwitchResult> {
         let matching = self
             .windows
             .get_windows()
@@ -85,12 +89,14 @@ impl Switcher {
         let target = match matching.first().cloned() {
             Some(window) => window,
             None if app.start_if_not_running => {
-                launch(app);
+                if launch(app).is_err() {
+                    return None;
+                }
                 return Some(AppSwitchResult {
-                    process_id: None,
                     process_path: app.process_path.clone(),
                     handle: None,
                     was_started: true,
+                    needs_elevation: false,
                 });
             }
             None => return None,
@@ -100,19 +106,19 @@ impl Switcher {
             || app.cycle_mode == CycleMode::NextApp
         {
             self.next_windows.clear();
-            activate(&target);
+            activate(&target, pulse_border);
             return Some(AppSwitchResult {
-                process_id: Some(target.process_id),
                 process_path: target.process_image_path.clone(),
                 handle: Some(target.handle),
                 was_started: false,
+                needs_elevation: target.needs_elevation,
             });
         }
         match app.cycle_mode {
             CycleMode::Hide => hide(target.handle),
             CycleMode::NextWindow => {
                 let next = self.next_window(&matching, &target);
-                activate(&next);
+                activate(&next, pulse_border);
             }
             CycleMode::NextApp => {}
         }
@@ -148,39 +154,66 @@ impl Switcher {
     }
 }
 
-fn launch(app: &ApplicationConfiguration) {
+fn launch(app: &ApplicationConfiguration) -> Result<(), std::io::Error> {
     if app.application_type == ApplicationType::Packaged {
-        let _ = Command::new("explorer.exe")
-            .args(["shell:AppsFolder\\", app.aumid.as_deref().unwrap_or("")])
-            .spawn();
+        Command::new("explorer.exe")
+            .arg(format!(
+                "shell:AppsFolder\\{}",
+                app.aumid.as_deref().unwrap_or("")
+            ))
+            .spawn()?;
     } else {
-        let _ = Command::new(Path::new(&app.process_path)).spawn();
+        Command::new(Path::new(&app.process_path)).spawn()?;
     }
+    Ok(())
 }
 fn hide(handle: isize) {
     unsafe {
-        ShowWindow(HWND(handle as *mut std::ffi::c_void), SW_MINIMIZE);
+        let _ = ShowWindow(HWND(handle as *mut std::ffi::c_void), SW_MINIMIZE);
     }
 }
-fn activate(window: &ApplicationWindow) {
+fn activate(window: &ApplicationWindow, pulse_border: bool) {
     unsafe {
         let hwnd = HWND(window.handle as *mut std::ffi::c_void);
         if IsIconic(hwnd).as_bool() {
             if window.process_id == 0 {
-                ShowWindow(hwnd, SW_RESTORE);
+                let _ = ShowWindow(hwnd, SW_RESTORE);
             } else {
                 SwitchToThisWindow(hwnd, true);
             }
         }
-        SetForegroundWindow(hwnd);
+        let input = INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT::default(),
+            },
+        };
+        let _ = SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
+        let _ = SetForegroundWindow(hwnd);
         if GetForegroundWindow() != hwnd {
             let target_thread = GetWindowThreadProcessId(hwnd, None);
             let foreground_thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
             if target_thread != foreground_thread {
-                AttachThreadInput(target_thread, foreground_thread, true);
-                SetForegroundWindow(hwnd);
-                AttachThreadInput(target_thread, foreground_thread, false);
+                let _ = AttachThreadInput(target_thread, foreground_thread, true);
+                let _ = SetForegroundWindow(hwnd);
+                let _ = AttachThreadInput(target_thread, foreground_thread, false);
             }
         }
+    }
+    if pulse_border {
+        let handle = window.handle;
+        std::thread::spawn(move || {
+            for color in [0x00d7ff, -1, 0x00d7ff, -1] {
+                unsafe {
+                    let _ = DwmSetWindowAttribute(
+                        HWND(handle as *mut std::ffi::c_void),
+                        DWMWA_BORDER_COLOR,
+                        (&color as *const i32).cast(),
+                        std::mem::size_of::<i32>() as u32,
+                    );
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        });
     }
 }

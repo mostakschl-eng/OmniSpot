@@ -2,6 +2,7 @@ use crate::configuration::{
     ApplicationConfiguration, ApplicationType, CycleMode as ConfigCycleMode, Key,
 };
 
+#[derive(Clone)]
 pub struct ApplicationShortcut {
     pub key: String,
     pub display_name: String,

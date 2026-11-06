@@ -1,4 +1,4 @@
-use super::{FileSearchProvider, SearchResult, SearchResultType, SpotlightUsageStore};
+use super::{SearchResult, SearchResultType, SpotlightUsageStore};
 use crate::{
     configuration::Configuration,
     window_discovery::{IconExtractor, PackagedApps, WindowEnumerator},
@@ -7,7 +7,6 @@ use std::{collections::HashSet, path::Path};
 
 pub struct SpotlightSearchService {
     usage: SpotlightUsageStore,
-    files: FileSearchProvider,
     packages: PackagedApps,
     icons: IconExtractor,
 }
@@ -15,15 +14,15 @@ impl SpotlightSearchService {
     pub fn new(usage: SpotlightUsageStore) -> Self {
         Self {
             usage,
-            files: FileSearchProvider::default(),
             packages: PackagedApps::default(),
-            icons: IconExtractor::default(),
+            icons: IconExtractor,
         }
     }
     pub fn suggestions(
         &mut self,
         config: &Configuration,
         windows: &mut WindowEnumerator,
+        recent_process_names: &[String],
     ) -> Vec<SearchResult> {
         let frequent = self.usage.get_frequent_targets(10);
         let catalog = self.catalog(config, windows);
@@ -36,6 +35,13 @@ impl SpotlightSearchService {
                     .cloned()
             })
             .collect::<Vec<_>>();
+        let mut catalog = catalog;
+        catalog.sort_by_key(|result| {
+            recent_process_names
+                .iter()
+                .position(|process| process.eq_ignore_ascii_case(&result.target))
+                .unwrap_or(usize::MAX)
+        });
         for result in catalog {
             if results.len() >= 10 {
                 break;
@@ -54,9 +60,10 @@ impl SpotlightSearchService {
         query: &str,
         config: &Configuration,
         windows: &mut WindowEnumerator,
+        recent_process_names: &[String],
     ) -> Vec<SearchResult> {
         if query.trim().is_empty() {
-            return self.suggestions(config, windows);
+            return self.suggestions(config, windows, recent_process_names);
         }
         let query = normalize(query);
         let mut results = self
@@ -77,27 +84,8 @@ impl SpotlightSearchService {
                 Some(result)
             })
             .collect::<Vec<_>>();
-        results.sort_by(|left, right| right.score.cmp(&left.score));
+        results.sort_by_key(|result| std::cmp::Reverse(result.score));
         results.truncate(25);
-        results
-    }
-    pub fn search(
-        &mut self,
-        query: &str,
-        config: &Configuration,
-        windows: &mut WindowEnumerator,
-    ) -> Vec<SearchResult> {
-        let mut results = self.search_apps(query, config, windows);
-        let seen = results
-            .iter()
-            .map(|result| result.target.to_ascii_lowercase())
-            .collect::<HashSet<_>>();
-        results.extend(
-            self.files
-                .search(query, 15)
-                .into_iter()
-                .filter(|result| !seen.contains(&result.target.to_ascii_lowercase())),
-        );
         results
     }
     pub fn record_launch(&self, result: &SearchResult) {

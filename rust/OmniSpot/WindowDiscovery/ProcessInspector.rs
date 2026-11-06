@@ -1,7 +1,9 @@
 use std::{ffi::OsStr, os::windows::ffi::OsStrExt, path::Path};
 use windows::Win32::{
     Foundation::{ERROR_ACCESS_DENIED, GetLastError},
-    Storage::FileSystem::GetBinaryTypeW,
+    Storage::FileSystem::{
+        GetBinaryTypeW, GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW,
+    },
     System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION},
     UI::Shell::{ASSOCF_OPEN_BYEXENAME, ASSOCSTR_FRIENDLYAPPNAME, AssocQueryStringW},
 };
@@ -41,6 +43,71 @@ impl ProcessInspector {
             .filter(|name| !name.is_empty())
             .unwrap_or(path)
             .to_string()
+    }
+
+    pub(crate) fn product_name(path: &str) -> Option<String> {
+        let path_wide = wide(path);
+        let size = unsafe { GetFileVersionInfoSizeW(PCWSTR(path_wide.as_ptr()), None) };
+        if size == 0 {
+            return None;
+        }
+        let mut data = vec![0u8; size as usize];
+        unsafe {
+            GetFileVersionInfoW(
+                PCWSTR(path_wide.as_ptr()),
+                None,
+                size,
+                data.as_mut_ptr().cast(),
+            )
+            .ok()?;
+        }
+        let translation_path = wide("\\VarFileInfo\\Translation");
+        let mut translations = std::ptr::null_mut();
+        let mut byte_len = 0u32;
+        if !unsafe {
+            VerQueryValueW(
+                data.as_ptr().cast(),
+                PCWSTR(translation_path.as_ptr()),
+                &mut translations,
+                &mut byte_len,
+            )
+        }
+        .as_bool()
+        {
+            return None;
+        }
+        for index in 0..(byte_len as usize / 4) {
+            let translation =
+                unsafe { std::ptr::read_unaligned(translations.cast::<u32>().add(index)) };
+            let language = translation as u16;
+            let code_page = (translation >> 16) as u16;
+            let query = wide(&format!(
+                "\\StringFileInfo\\{language:04X}{code_page:04X}\\ProductName"
+            ));
+            let mut product = std::ptr::null_mut();
+            let mut length = 0u32;
+            if unsafe {
+                VerQueryValueW(
+                    data.as_ptr().cast(),
+                    PCWSTR(query.as_ptr()),
+                    &mut product,
+                    &mut length,
+                )
+            }
+            .as_bool()
+                && length > 1
+            {
+                let value = unsafe {
+                    std::slice::from_raw_parts(product.cast::<u16>(), length as usize - 1)
+                };
+                if let Ok(value) = String::from_utf16(value)
+                    && !value.trim().is_empty()
+                {
+                    return Some(value);
+                }
+            }
+        }
+        None
     }
 }
 

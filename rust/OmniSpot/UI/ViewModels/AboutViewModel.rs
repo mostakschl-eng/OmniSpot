@@ -8,4 +8,10 @@ impl AboutViewModel {
     pub(crate) fn app_version() -> String {
         format!("Version {}", env!("CARGO_PKG_VERSION"))
     }
+
+    pub(crate) fn app_icon() -> Option<String> {
+        std::env::current_exe().ok().and_then(|path| {
+            crate::window_discovery::IconExtractor.get_by_process_path(&path.to_string_lossy())
+        })
+    }
 }

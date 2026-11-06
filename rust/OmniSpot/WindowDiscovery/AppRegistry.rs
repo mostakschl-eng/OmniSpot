@@ -15,20 +15,26 @@ impl AppRegistryCache {
         let entries = fs::read_to_string(&path)
             .ok()
             .and_then(|text| serde_json::from_str(&text).ok())
+            .or_else(|| {
+                path.parent()
+                    .and_then(|directory| {
+                        crate::legacy_import::profile_bundle(directory)
+                            .ok()
+                            .flatten()
+                    })
+                    .map(|bundle| {
+                        bundle
+                            .app_registry
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect()
+                    })
+            })
             .unwrap_or_default();
         Self {
             path: Some(path),
             entries,
         }
-    }
-
-    pub fn for_user() -> Self {
-        let path = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir)
-            .join("OmniSpot")
-            .join("app_registry.json");
-        Self::new(path)
     }
 
     pub fn prepopulate(&mut self, config: &Configuration, windows: &[ApplicationWindow]) {
@@ -56,14 +62,10 @@ impl AppRegistryCache {
 
     fn flush(&self) {
         let Some(path) = &self.path else { return };
-        let Some(parent) = path.parent() else { return };
-        if fs::create_dir_all(parent).is_ok() {
-            if let Ok(text) = serde_json::to_string_pretty(&self.entries) {
-                let temp = path.with_extension("json.tmp");
-                if fs::write(&temp, text).is_ok() {
-                    let _ = fs::rename(temp, path);
-                }
-            }
+        if let Ok(text) = serde_json::to_string_pretty(&self.entries)
+            && let Err(error) = crate::atomic_file::write(path, text.as_bytes())
+        {
+            crate::logging::debug(format!("Failed to save app registry: {error}"));
         }
     }
 }

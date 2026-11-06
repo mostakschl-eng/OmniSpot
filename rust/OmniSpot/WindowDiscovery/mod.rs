@@ -14,5 +14,5 @@ pub mod window_enumerator;
 pub use app_registry::AppRegistryCache;
 pub use application_window::ApplicationWindow;
 pub use icon_extractor::IconExtractor;
-pub use packaged_apps::{PackagedApp, PackagedApps};
+pub use packaged_apps::PackagedApps;
 pub use window_enumerator::WindowEnumerator;

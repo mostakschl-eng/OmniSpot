@@ -20,7 +20,7 @@ impl SettingsWindow {
             ))
             .child("Activation Shortcut (Modifier + Space bar)")
             .child(modifier_key_selector(
-                self.state.spotlight_modifier,
+                &self.state.spotlight_modifier,
                 true,
                 cx,
             ))

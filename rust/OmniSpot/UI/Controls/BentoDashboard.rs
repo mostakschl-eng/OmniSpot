@@ -24,7 +24,7 @@ pub(crate) fn bento_dashboard(metrics: &StatsMetrics) -> impl IntoElement {
     let top_apps = metrics
         .podium
         .iter()
-        .map(|app| format!("{} ({})", app.process_name, app.switches))
+        .map(|app| format!("{} ({})", app.display_name, app.switches))
         .collect::<Vec<_>>()
         .join("  •  ");
     div()
@@ -38,15 +38,26 @@ pub(crate) fn bento_dashboard(metrics: &StatsMetrics) -> impl IntoElement {
                 .gap_3()
                 .child(metric("Life gained back", metrics.life_gained.clone()))
                 .child(metric(
-                    "Switches today",
-                    metrics.today_switch_count.to_string(),
+                    "Productivity streak",
+                    if metrics.is_session_warmup {
+                        format!("Warming up · {} / 10 switches", metrics.total_switch_count)
+                    } else {
+                        format!(
+                            "{} days · {} today",
+                            metrics.teleport_streak, metrics.today_switch_count
+                        )
+                    },
                 ))
                 .child(metric(
                     "Muscle memory",
-                    format!(
-                        "{} · {}",
-                        metrics.muscle_memo_grade, metrics.muscle_memo_persona
-                    ),
+                    if metrics.is_session_warmup {
+                        "Measuring...".into()
+                    } else {
+                        format!(
+                            "{} · {}",
+                            metrics.muscle_memo_grade, metrics.muscle_memo_persona
+                        )
+                    },
                 )),
         )
         .child(
@@ -82,5 +93,28 @@ pub(crate) fn bento_dashboard(metrics: &StatsMetrics) -> impl IntoElement {
                     ),
                 )),
         )
+        .child(metric(
+            "Most peeked app",
+            metrics
+                .most_peeked_app
+                .as_ref()
+                .map(|app| format!("{} · {} peeks", app.display_name, app.peeks))
+                .unwrap_or_else(|| "—".into()),
+        ))
+        .child(metric(
+            "Shortcut maintenance",
+            if metrics.is_maintenance_warmup {
+                format!(
+                    "Warming up · {} / 14 days",
+                    metrics.maintenance_days.min(14)
+                )
+            } else {
+                metrics
+                    .first_stale_shortcut
+                    .as_ref()
+                    .map(|app| format!("Unused: {} ({})", app.display_name, app.letter))
+                    .unwrap_or_else(|| "All shortcuts in use".into())
+            },
+        ))
         .child(metric("Total peeks", metrics.total_peek_count.to_string()))
 }

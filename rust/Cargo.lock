@@ -2927,13 +2927,15 @@ dependencies = [
 
 [[package]]
 name = "omnispot-rust"
-version = "0.0.0"
+version = "1.0.2"
 dependencies = [
+ "async-channel 2.5.0",
  "gpui",
  "png 0.17.16",
  "raw-window-handle",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "windows",
 ]
 

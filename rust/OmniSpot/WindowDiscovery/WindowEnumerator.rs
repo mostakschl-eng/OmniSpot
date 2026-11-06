@@ -22,14 +22,9 @@ use windows::Win32::{
 };
 use windows::core::{BOOL, PWSTR};
 
+#[derive(Default)]
 pub struct WindowEnumerator {
     cached: Option<(Instant, Vec<ApplicationWindow>)>,
-}
-
-impl Default for WindowEnumerator {
-    fn default() -> Self {
-        Self { cached: None }
-    }
 }
 
 impl WindowEnumerator {
@@ -111,10 +106,10 @@ impl WindowEnumerator {
         self.get_cached_windows().len()
     }
     pub fn get_cached_windows(&mut self) -> Vec<ApplicationWindow> {
-        if let Some((at, windows)) = &self.cached {
-            if at.elapsed() < Duration::from_secs(10) {
-                return windows.clone();
-            }
+        if let Some((at, windows)) = &self.cached
+            && at.elapsed() < Duration::from_secs(10)
+        {
+            return windows.clone();
         }
         let windows = self.get_windows();
         self.cached = Some((Instant::now(), windows.clone()));
@@ -209,6 +204,7 @@ impl WindowEnumerator {
             process_id,
             process_image_path: path,
             is_minimized: unsafe { IsIconic(hwnd).as_bool() },
+            show_state: placement.showCmd as i32,
             is_cloaked: cloaked != 0,
             extended_style,
             style,
@@ -223,11 +219,13 @@ impl WindowEnumerator {
 }
 
 unsafe extern "system" fn enumerate_window(hwnd: HWND, data: LPARAM) -> BOOL {
-    let state = &mut *(data.0 as *mut (Vec<HWND>, HWND));
-    if hwnd != state.1 && IsWindowVisible(hwnd).as_bool() && IsWindow(Some(hwnd)).as_bool() {
-        state.0.push(hwnd);
+    unsafe {
+        let state = &mut *(data.0 as *mut (Vec<HWND>, HWND));
+        if hwnd != state.1 && IsWindowVisible(hwnd).as_bool() && IsWindow(Some(hwnd)).as_bool() {
+            state.0.push(hwnd);
+        }
+        BOOL(1)
     }
-    BOOL(1)
 }
 
 fn get_window_text(hwnd: HWND) -> String {

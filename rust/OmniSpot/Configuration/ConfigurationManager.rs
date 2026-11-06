@@ -10,7 +10,6 @@ pub struct ConfigurationManager {
     validator: ConfigurationValidator,
     migrations: MigrationRunner,
     current: Option<Configuration>,
-    listeners: Vec<Box<dyn Fn(&Configuration)>>,
 }
 impl ConfigurationManager {
     pub fn new(service: ConfigurationService) -> Self {
@@ -20,7 +19,6 @@ impl ConfigurationManager {
             migrations: MigrationRunner::new()
                 .with_migration(Box::new(super::migrations::FixPackagedAppsMigration)),
             current: None,
-            listeners: Vec::new(),
         }
     }
     pub fn load(&mut self) -> Result<Configuration, ConfigurationError> {
@@ -32,11 +30,15 @@ impl ConfigurationManager {
         {
             self.service.write_document(&document)?;
         }
-        let config = document.to_configuration();
-        self.current = Some(config.clone());
-        for listener in &self.listeners {
-            listener(&config);
+        let mut config = document.to_configuration();
+        let mut packages = crate::window_discovery::packaged_apps::PackagedApps::default();
+        let sanitizer =
+            super::sanitizer::PackagedAppPathSanitizer::new(packages.installed().to_vec());
+        if let Some(sanitized) = sanitizer.sanitize(&config) {
+            self.service.write(&sanitized)?;
+            config = sanitized;
         }
+        self.current = Some(config.clone());
         Ok(config)
     }
     pub fn get(&mut self) -> Result<Configuration, ConfigurationError> {
@@ -57,12 +59,6 @@ impl ConfigurationManager {
         }
         self.service.write(&config)?;
         self.current = Some(config.clone());
-        for listener in &self.listeners {
-            listener(&config);
-        }
         Ok(())
-    }
-    pub fn on_changed(&mut self, listener: impl Fn(&Configuration) + 'static) {
-        self.listeners.push(Box::new(listener));
     }
 }

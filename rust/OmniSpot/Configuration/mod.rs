@@ -17,5 +17,4 @@ pub use manager::ConfigurationManager;
 pub use model::{
     AppThemeSetting, ApplicationConfiguration, ApplicationType, Configuration, CycleMode, Key,
 };
-pub use service::{ConfigurationError, ConfigurationService, SettingsPath};
-pub use validator::{ConfigurationValidator, ValidationResult};
+pub use service::{ConfigurationService, SettingsPath};

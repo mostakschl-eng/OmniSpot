@@ -76,9 +76,6 @@ impl KeyStateMachine {
         self.alt_tab_sticky = false;
         self.alt_nav_count = 0;
     }
-    pub fn is_modifier_held(&self) -> bool {
-        self.state != State::Idle
-    }
     pub fn configured_modifier_has_side_effect(&self) -> bool {
         has_side_effect(self.configured_modifier)
     }
@@ -93,10 +90,10 @@ impl KeyStateMachine {
         if self.spotlight_enabled && key == Key::Space && self.is_spotlight_modifier_held() {
             return KeyTransition::SpotlightShortcutPressed;
         }
-        if key != self.configured_modifier {
-            if let Some(transition) = self.handle_alt_tab_down(key) {
-                return transition;
-            }
+        if key != self.configured_modifier
+            && let Some(transition) = self.handle_alt_tab_down(key)
+        {
+            return transition;
         }
         if key == self.configured_modifier {
             let first = self.state == State::Idle;

@@ -1,6 +1,6 @@
+use async_channel::Sender;
 use std::{
     os::windows::ffi::OsStrExt,
-    sync::mpsc::Sender,
     thread::{self, JoinHandle},
 };
 use windows::Win32::{
@@ -104,8 +104,8 @@ fn tray_thread(
         return;
     }
     let hwnd = hwnd.unwrap();
-    let mut data = notification_data(hwnd);
-    if !unsafe { Shell_NotifyIconW(NIM_ADD, &mut data) }.as_bool() {
+    let data = notification_data(hwnd);
+    if !unsafe { Shell_NotifyIconW(NIM_ADD, &data) }.as_bool() {
         unsafe {
             drop(Box::from_raw(state_ptr));
         }
@@ -123,12 +123,12 @@ fn tray_thread(
             break;
         }
         unsafe {
-            TranslateMessage(&message);
+            let _ = TranslateMessage(&message);
             DispatchMessageW(&message);
         }
     }
     unsafe {
-        let _ = Shell_NotifyIconW(NIM_DELETE, &mut data);
+        let _ = Shell_NotifyIconW(NIM_DELETE, &data);
         let _ = DestroyWindow(hwnd);
         drop(Box::from_raw(state_ptr));
     }
@@ -144,55 +144,61 @@ unsafe extern "system" fn tray_window_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    if message == WM_NCCREATE {
-        let create = &*(lparam.0 as *const CREATESTRUCTW);
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize);
+    unsafe {
+        if message == WM_NCCREATE {
+            let create = &*(lparam.0 as *const CREATESTRUCTW);
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize);
+        }
+        match message {
+            TRAY_CALLBACK_MESSAGE => match lparam.0 as u32 {
+                WM_LBUTTONDBLCLK => send_event(hwnd, crate::input::hook::InputEvent::OpenSettings),
+                WM_RBUTTONUP => show_menu(hwnd),
+                _ => {}
+            },
+            WM_COMMAND => match wparam.0 & 0xffff {
+                OPEN_SETTINGS => send_event(hwnd, crate::input::hook::InputEvent::OpenSettings),
+                EXIT_APPLICATION => send_event(hwnd, crate::input::hook::InputEvent::Exit),
+                _ => {}
+            },
+            _ => return DefWindowProcW(hwnd, message, wparam, lparam),
+        }
+        LRESULT(0)
     }
-    match message {
-        TRAY_CALLBACK_MESSAGE => match lparam.0 as u32 {
-            WM_LBUTTONDBLCLK => send_event(hwnd, crate::input::hook::InputEvent::OpenSettings),
-            WM_RBUTTONUP => show_menu(hwnd),
-            _ => {}
-        },
-        WM_COMMAND => match wparam.0 & 0xffff {
-            OPEN_SETTINGS => send_event(hwnd, crate::input::hook::InputEvent::OpenSettings),
-            EXIT_APPLICATION => send_event(hwnd, crate::input::hook::InputEvent::Exit),
-            _ => {}
-        },
-        _ => return DefWindowProcW(hwnd, message, wparam, lparam),
-    }
-    LRESULT(0)
 }
 
 unsafe fn send_event(hwnd: HWND, event: crate::input::hook::InputEvent) {
-    let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const TrayState;
-    if !state_ptr.is_null() {
-        let _ = (*state_ptr).events.send(event);
+    unsafe {
+        let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const TrayState;
+        if !state_ptr.is_null() {
+            let _ = (*state_ptr).events.try_send(event);
+        }
     }
 }
 
 unsafe fn show_menu(hwnd: HWND) {
-    let Ok(menu) = CreatePopupMenu() else {
-        return;
-    };
-    let open = wide("Settings");
-    let exit = wide("Exit");
-    let _ = AppendMenuW(menu, MF_STRING, OPEN_SETTINGS, PCWSTR(open.as_ptr()));
-    let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-    let _ = AppendMenuW(menu, MF_STRING, EXIT_APPLICATION, PCWSTR(exit.as_ptr()));
-    let mut point = POINT::default();
-    let _ = GetCursorPos(&mut point);
-    let _ = SetForegroundWindow(hwnd);
-    let _ = TrackPopupMenu(
-        menu,
-        TPM_LEFTALIGN | TPM_BOTTOMALIGN,
-        point.x,
-        point.y,
-        None,
-        hwnd,
-        None,
-    );
-    let _ = DestroyMenu(menu);
+    unsafe {
+        let Ok(menu) = CreatePopupMenu() else {
+            return;
+        };
+        let open = wide("Settings");
+        let exit = wide("Exit");
+        let _ = AppendMenuW(menu, MF_STRING, OPEN_SETTINGS, PCWSTR(open.as_ptr()));
+        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let _ = AppendMenuW(menu, MF_STRING, EXIT_APPLICATION, PCWSTR(exit.as_ptr()));
+        let mut point = POINT::default();
+        let _ = GetCursorPos(&mut point);
+        let _ = SetForegroundWindow(hwnd);
+        let _ = TrackPopupMenu(
+            menu,
+            TPM_LEFTALIGN | TPM_BOTTOMALIGN,
+            point.x,
+            point.y,
+            None,
+            hwnd,
+            None,
+        );
+        let _ = DestroyMenu(menu);
+    }
 }
 
 fn notification_data(hwnd: HWND) -> NOTIFYICONDATAW {

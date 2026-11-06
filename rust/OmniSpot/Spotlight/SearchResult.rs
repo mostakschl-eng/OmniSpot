@@ -42,4 +42,21 @@ impl SearchResult {
         result.icon_path = Some(icon_path.into());
         result
     }
+
+    pub fn file(
+        title: impl Into<String>,
+        subtitle: impl Into<String>,
+        target: impl Into<String>,
+        score: i32,
+        icon_path: Option<String>,
+    ) -> Self {
+        Self {
+            title: title.into(),
+            subtitle: subtitle.into(),
+            target: target.into(),
+            result_type: SearchResultType::File,
+            score,
+            icon_path,
+        }
+    }
 }

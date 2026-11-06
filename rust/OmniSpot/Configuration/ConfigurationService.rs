@@ -22,6 +22,17 @@ impl From<serde_json::Error> for ConfigurationError {
         Self::Json(value)
     }
 }
+impl std::fmt::Display for ConfigurationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "I/O error: {error}"),
+            Self::Json(error) => write!(formatter, "Invalid settings JSON: {error}"),
+            Self::InvalidPath => formatter.write_str("Could not determine the settings path"),
+            Self::InvalidConfiguration(message) => formatter.write_str(message),
+        }
+    }
+}
+impl std::error::Error for ConfigurationError {}
 pub struct SettingsPath;
 impl SettingsPath {
     pub fn resolve(executable_dir: &Path, portable: bool) -> Result<PathBuf, ConfigurationError> {
@@ -41,14 +52,14 @@ impl ConfigurationService {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-    pub fn read(&self) -> Result<Configuration, ConfigurationError> {
-        Ok(self.read_document()?.to_configuration())
-    }
     pub fn read_document(&self) -> Result<SettingsDocument, ConfigurationError> {
         if !self.path.exists() {
+            if let Some(data_dir) = self.path.parent()
+                && let Some(bundle) = crate::legacy_import::profile_bundle(data_dir)
+                    .map_err(ConfigurationError::InvalidConfiguration)?
+            {
+                return Ok(bundle.settings.clone());
+            }
             return Ok(SettingsDocument::from_configuration(
                 &Configuration::default(),
             ));
@@ -56,20 +67,16 @@ impl ConfigurationService {
         let text = fs::read_to_string(&self.path)?;
         Ok(serde_json::from_str::<SettingsDocument>(&text)?)
     }
+    #[cfg(test)]
+    pub fn read(&self) -> Result<Configuration, ConfigurationError> {
+        Ok(self.read_document()?.to_configuration())
+    }
     pub fn write(&self, config: &Configuration) -> Result<(), ConfigurationError> {
         self.write_document(&SettingsDocument::from_configuration(config))
     }
     pub fn write_document(&self, document: &SettingsDocument) -> Result<(), ConfigurationError> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
         let text = serde_json::to_string_pretty(document)?;
-        let temp = self.path.with_extension("json.tmp");
-        fs::write(&temp, text)?;
-        if self.path.exists() {
-            fs::remove_file(&self.path)?;
-        }
-        fs::rename(temp, &self.path)?;
+        crate::atomic_file::write(&self.path, text.as_bytes())?;
         Ok(())
     }
 }

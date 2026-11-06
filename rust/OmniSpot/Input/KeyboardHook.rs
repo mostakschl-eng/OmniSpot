@@ -106,6 +106,9 @@ impl KeyboardHook {
 impl Drop for KeyboardHook {
     fn drop(&mut self) {
         self.stop();
+        unsafe {
+            let _ = UnhookWindowsHookEx(self.hook);
+        }
     }
 }
 

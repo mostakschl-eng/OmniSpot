@@ -1,7 +1,7 @@
 use crate::input::hook::InputEvent;
 use crate::ui::view_models::overlay::{OverlayRow, OverlayState};
+use async_channel::Sender;
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rgb};
-use std::sync::mpsc::Sender;
 
 #[derive(Default)]
 pub struct AppOverlayWindow {
@@ -37,7 +37,7 @@ fn row(item: &OverlayRow, events: Option<Sender<InputEvent>>) -> impl IntoElemen
                 }
             };
             if let Some(events) = &events {
-                let _ = events.send(event);
+                let _ = events.try_send(event);
             }
         })
         .child(item.name.clone())

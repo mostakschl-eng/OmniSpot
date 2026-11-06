@@ -113,6 +113,10 @@ impl Default for SessionStats {
     }
 }
 impl SessionStats {
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
     pub fn record_switch(
         &mut self,
         process: &str,
@@ -145,11 +149,6 @@ impl SessionStats {
             .chain(std::iter::once(self.current.clone()))
             .collect()
     }
-    pub fn load_from(&mut self, bucket: DailyBucket) {
-        self.current = bucket;
-        self.history.clear();
-    }
-
     pub fn load_from_buckets(&mut self, buckets: &[DailyBucket]) {
         let mut buckets = buckets.to_vec();
         buckets.sort_by(|left, right| left.date.cmp(&right.date));
@@ -176,11 +175,8 @@ fn now_ms() -> u128 {
         .unwrap_or_default()
 }
 fn today() -> String {
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or_default();
-    format!("day-{}", seconds / 86_400)
+    let local = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    format!("{:04}-{:02}-{:02}", local.wYear, local.wMonth, local.wDay)
 }
 
 #[cfg(test)]
@@ -190,11 +186,11 @@ mod tests {
     #[test]
     fn retains_all_historical_buckets_across_rollover() {
         let mut stats = SessionStats::default();
-        stats.current.date = "day-10".to_string();
+        stats.current.date = "1900-01-01".to_string();
         stats.current.total_switches = 2;
         stats.rollover();
         stats.current.total_switches = 3;
-        stats.current.date = "day-11".to_string();
+        stats.current.date = "1900-01-02".to_string();
         stats.rollover();
         assert_eq!(stats.snapshots().len(), 3);
         assert_eq!(stats.snapshots()[0].total_switches, 2);
@@ -204,11 +200,20 @@ mod tests {
     fn loads_all_buckets_in_date_order() {
         let mut stats = SessionStats::default();
         let mut first = DailyBucket::today();
-        first.date = "day-1".to_string();
+        first.date = "1900-01-01".to_string();
         let mut second = DailyBucket::today();
-        second.date = "day-2".to_string();
+        second.date = "1900-01-02".to_string();
         stats.load_from_buckets(&[second, first]);
-        assert_eq!(stats.snapshots()[0].date, "day-1");
-        assert_eq!(stats.snapshots()[1].date, "day-2");
+        assert_eq!(stats.snapshots()[0].date, "1900-01-01");
+        assert_eq!(stats.snapshots()[1].date, "1900-01-02");
+    }
+
+    #[test]
+    fn clear_removes_history_and_recent_suggestions() {
+        let mut stats = SessionStats::default();
+        stats.record_switch("editor.exe", 50, 100, false, Some(50), Key::E);
+        stats.clear();
+        assert!(stats.snapshots()[0].static_app_usage.is_empty());
+        assert!(stats.recent_process_names().is_empty());
     }
 }

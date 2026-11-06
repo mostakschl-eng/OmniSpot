@@ -59,12 +59,12 @@ impl SpotlightState {
         self.selected_path = if self.query.is_empty() {
             self.suggestions
                 .get(next)
-                .map(|result| result.title.clone())
+                .map(|result| result.target.clone())
                 .unwrap_or_default()
         } else {
             self.results
                 .get(next)
-                .map(|result| result.title.clone())
+                .map(|result| result.target.clone())
                 .unwrap_or_default()
         };
     }

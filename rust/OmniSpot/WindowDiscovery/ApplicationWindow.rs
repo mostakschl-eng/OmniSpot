@@ -7,6 +7,7 @@ pub struct ApplicationWindow {
     pub process_id: u32,
     pub process_image_path: String,
     pub is_minimized: bool,
+    pub show_state: i32,
     pub is_cloaked: bool,
     pub extended_style: u32,
     pub style: u32,

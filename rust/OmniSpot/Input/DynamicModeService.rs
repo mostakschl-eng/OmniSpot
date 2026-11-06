@@ -1,11 +1,14 @@
+#[cfg(test)]
+use crate::window_discovery::process_inspector::ProcessInspector;
 use crate::{
     configuration::{ApplicationConfiguration, ApplicationType, CycleMode, Key},
-    window_discovery::{AppRegistryCache, ApplicationWindow, process_inspector::ProcessInspector},
+    window_discovery::{AppRegistryCache, ApplicationWindow},
 };
 use std::collections::HashSet;
 
 pub struct DynamicModeService;
 impl DynamicModeService {
+    #[cfg(test)]
     pub fn get_apps_for_key(
         letter: Key,
         static_apps: &[ApplicationConfiguration],
@@ -112,6 +115,7 @@ mod tests {
             process_id: 1,
             process_image_path: path.to_string(),
             is_minimized: false,
+            show_state: 1,
             is_cloaked: false,
             extended_style: 0,
             style: 0,

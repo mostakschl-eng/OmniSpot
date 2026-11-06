@@ -138,7 +138,7 @@ fn bitmap_to_png(bitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> Option<Vec<u
     if scan_lines == 0 {
         return None;
     }
-    for pixel in bgra.chunks_exact_mut(4) {
+    for pixel in bgra.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
         if pixel[3] == 0 {
             pixel[3] = 255;

@@ -25,9 +25,9 @@ fn key(
         cap.cursor_pointer()
             .on_click(cx.listener(move |this, _, _, cx| {
                 if spotlight {
-                    this.state.spotlight_modifier = label;
+                    this.state.spotlight_modifier = label.to_string();
                 } else {
-                    this.state.modifier = label;
+                    this.state.modifier = label.to_string();
                 }
                 cx.notify();
             }))
@@ -38,7 +38,7 @@ fn key(
 }
 
 pub(crate) fn modifier_key_selector(
-    selected: &'static str,
+    selected: &str,
     spotlight: bool,
     cx: &mut Context<SettingsWindow>,
 ) -> impl IntoElement {

@@ -40,16 +40,6 @@ impl WarningOverlayService {
         true
     }
 
-    pub(crate) fn mouse_enter(&mut self) {
-        self.dismiss_timer.cancel();
-    }
-
-    pub(crate) fn mouse_leave(&mut self) {
-        if self.visible.load(Ordering::SeqCst) {
-            self.schedule_dismiss(2000);
-        }
-    }
-
     pub(crate) fn dismiss(&mut self) {
         self.dismiss_timer.cancel();
         if self.visible.swap(false, Ordering::SeqCst) {

@@ -57,11 +57,10 @@ impl Migration for FixPackagedAppsMigration {
             if let Some(package) = packages.installed().iter().find(|package| {
                 std::path::Path::new(&app.process_path)
                     .starts_with(std::path::Path::new(&package.installed_path))
-            }) {
-                if let Some(aumid) = &package.aumid {
-                    app.application_type = ApplicationType::Packaged;
-                    app.aumid = Some(aumid.clone());
-                }
+            }) && let Some(aumid) = &package.aumid
+            {
+                app.application_type = ApplicationType::Packaged;
+                app.aumid = Some(aumid.clone());
             }
         }
         Ok(())

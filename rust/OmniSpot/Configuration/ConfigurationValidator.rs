@@ -100,11 +100,7 @@ mod tests {
             ..Configuration::default()
         };
 
-        assert!(
-            !ConfigurationValidator::default()
-                .validate(&config)
-                .is_success()
-        );
+        assert!(!ConfigurationValidator.validate(&config).is_success());
     }
 
     #[test]
@@ -118,11 +114,7 @@ mod tests {
             ..Configuration::default()
         };
 
-        assert!(
-            ConfigurationValidator::default()
-                .validate(&config)
-                .is_success()
-        );
+        assert!(ConfigurationValidator.validate(&config).is_success());
     }
 
     #[test]
@@ -132,7 +124,7 @@ mod tests {
             ..Configuration::default()
         };
 
-        let result = ConfigurationValidator::default().validate(&config);
+        let result = ConfigurationValidator.validate(&config);
 
         assert_eq!(result.process.as_deref(), Some("app.exe"));
         assert!(result.message.unwrap().contains("missing or invalid"));

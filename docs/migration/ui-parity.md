@@ -1,28 +1,28 @@
 # UI conversion status
 
-The C# UI has 16 XAML views/controls and 59 UI files including code-behind and view models. Rust UI files mirror the C# names under `rust/OmniSpot/UI/{Controls,Pages,ViewModels,Windows}`. The C# sources remain the visual and behavior reference until each Rust view is checked side by side.
+The C# UI has 16 XAML views/controls and 59 UI files including code-behind and view models. Rust uses fewer, sometimes combined modules; the C# sources remain the behavior and visual reference. A matching file count is not the parity gate.
 
 | C# XAML | Rust UI | Status |
 |---|---|---|
-| `Windows/Settings.xaml` | `Windows/Settings.rs` | Shell, navigation and footer present; focus, discard and Save & Apply pending |
-| `Pages/General.xaml` | `Pages/General.rs` | Cards and key selector present; layout and saved settings pending |
-| `Controls/ModifierKeySelector.xaml` | `Controls/ModifierKeySelector.rs` | Three keyboard rows and selection present; visual check pending |
-| `Pages/Hotkeys.xaml` | `Pages/Hotkeys.rs` | Empty state, configured row layout and Add flyout visible; picker, drag/reorder and editing pending |
-| `Controls/KeyAssignmentButton.xaml` | `Controls/KeyAssignmentButton.rs` | Badge present; assignment input pending |
-| `Controls/CycleModeSelector.xaml` | `Controls/CycleModeSelector.rs` | Three mode buttons select the Rust page state; saved settings pending |
-| `Controls/AddApplicationFlyout.xaml` | `Controls/AddApplicationFlyout.rs` | Flyout layout present; search, browse and selection pending |
-| `Pages/Overlay.xaml` | `Pages/Overlay.rs` | Cards and bounded 100 ms delay stepper present; C# numeric text input and live preview pending |
-| `Pages/SpotlightSearch.xaml` | `Pages/SpotlightSearch.rs` | Toggle and key selector present; saved settings pending |
-| `Pages/Stats.xaml` | `Pages/Stats.rs` | Privacy shield, enable and disable controls present; reset action and full dashboard pending |
-| `Controls/BentoDashboard.xaml` | `Controls/BentoDashboard.rs` | Metric groups present; charts, data and layout pending |
-| `Pages/About.xaml` | `Pages/About.rs` | Identity card and Support rows present; icon and actions pending |
-| `Windows/MainWindow.xaml` | — | Tray owner pending |
-| `Windows/AppOverlayWindow.xaml` | `Windows/AppOverlayWindow.rs` | Running/launchable/dynamic row sections bound to UI state; native placement, focus and actions pending |
-| `Windows/WarningOverlayWindow.xaml` | `Windows/WarningOverlayWindow.rs` | 300 px warning card, title, message, dismiss and caution bar present; native placement, countdown and link pending |
-| `Windows/SpotlightWindow.xaml` | `Windows/SpotlightWindow.rs` | Search box, result list and footer layout bound to UI state; text entry, selection and actions pending |
+| `Windows/Settings.xaml` | `Windows/Settings.rs` | Shell, navigation, settings state, Save & Apply, reset and discard prompt are wired; visual and focus parity still needs review |
+| `Pages/General.xaml` | `Pages/General.rs` | Theme, modifier, startup, dynamic, pulse-border and peek controls are wired; visual parity remains |
+| `Controls/ModifierKeySelector.xaml` | `Controls/ModifierKeySelector.rs` | Modifier selection is wired; visual and keyboard-access parity remains |
+| `Pages/Hotkeys.xaml` | `Pages/Hotkeys.rs` | App add/remove/reorder, key assignment, cycle mode, picker and save workflow are wired; drag-reorder parity remains |
+| `Controls/KeyAssignmentButton.xaml` | `Controls/KeyAssignmentButton.rs` | Key capture and assignment are wired; visual parity remains |
+| `Controls/CycleModeSelector.xaml` | `Controls/CycleModeSelector.rs` | All three cycle modes update the shared settings state; visual parity remains |
+| `Controls/AddApplicationFlyout.xaml` | `Controls/AddApplicationFlyout.rs` | Running-app selection and executable browsing are wired; visual and search behavior parity remains |
+| `Pages/Overlay.xaml` | `Pages/Overlay.rs` | Delay and toggles update shared settings; overlay preview is wired; exact numeric input/layout parity remains |
+| `Pages/SpotlightSearch.xaml` | `Pages/SpotlightSearch.rs` | Spotlight enable and modifier settings are wired; visual parity remains |
+| `Pages/Stats.xaml` | `Pages/Stats.rs` | Privacy, enable/disable, confirmed reset and maintenance action are wired; dashboard parity remains incomplete |
+| `Controls/BentoDashboard.xaml` | `Controls/BentoDashboard.rs` | Live metrics and warmup/maintenance cards are wired; complete C# card layout, progress indicators and tooltips remain |
+| `Pages/About.xaml` | `Pages/About.rs` | App icon/version and support actions are wired, including window diagnostics to clipboard; visual parity remains |
+| `Windows/MainWindow.xaml` | `UI/Tray.rs`, `App.rs` | Tray-first Settings/Exit lifecycle is implemented; live lifecycle parity still needs validation |
+| `Windows/AppOverlayWindow.xaml` | `Windows/AppOverlayWindow.rs` | Running/launchable/dynamic rows and actions are wired; native placement/focus behavior needs live validation |
+| `Windows/WarningOverlayWindow.xaml` | `Windows/WarningOverlayWindow.rs` | Warning display and dismiss are wired; native placement/focus behavior needs live validation |
+| `Windows/SpotlightWindow.xaml` | `Windows/SpotlightWindow.rs` | Search input, result selection, keyboard navigation and launch are wired; live focus/IME and exact visual parity remain |
 
-UI state is local to the Rust process. It does not read the active C# databases, install startup shortcuts, register hooks or collect statistics. Displaying a control is not evidence that its C# action has been ported. Complete each pending row before claiming full UI parity.
+Settings use Rust JSON data; the active C# LiteDB files are only accessed through the separate read-only migration exporter. Controls above are connected to Rust state/actions, while each listed visual or live behavior gap remains unverified.
 
 ## File-stem audit
 
-The C# `UI` tree has 59 physical files. XAML and its code-behind share one Rust `.rs` stem. The five `ViewModels/DesignTime` classes exist only for the WPF designer; `rust/OmniSpot/UI/ViewModels/DesignTime/README.md` records why they have no Rust runtime modules. The Rust tree still lacks runtime equivalents for `Pages/PageProviderService`, `Windows/MainWindow`, and 15 view-model stems (including Settings, Hotkeys, General, Overlay, Stats, and the shared state helpers). These are outstanding conversions, not completed files.
+The C# `UI` tree has 59 physical files. XAML and code-behind behavior is combined in Rust modules, and shared WPF view-model responsibilities are folded into Rust page/window state. The five `ViewModels/DesignTime` classes are designer-only. `PageProviderService` is represented by the Rust Settings page enum/render switch; `MainWindow` lifecycle is represented by the tray and app composition. Review remaining behavior and visuals by the table above, not by one-to-one view-model file counts.

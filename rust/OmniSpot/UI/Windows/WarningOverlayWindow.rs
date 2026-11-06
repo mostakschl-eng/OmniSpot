@@ -1,9 +1,11 @@
 use crate::overlay::warning_content::WarningContent;
+use async_channel::Sender;
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rgb};
 
 pub struct WarningOverlayWindow {
     pub content: WarningContent,
     pub dismissed: bool,
+    pub events: Option<Sender<crate::input::hook::InputEvent>>,
 }
 
 impl Render for WarningOverlayWindow {
@@ -65,6 +67,11 @@ impl Render for WarningOverlayWindow {
                                         .child("×")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.dismissed = true;
+                                            if let Some(events) = &this.events {
+                                                let _ = events.try_send(
+                                                    crate::input::hook::InputEvent::DismissWarning,
+                                                );
+                                            }
                                             cx.notify();
                                         })),
                                 ),
