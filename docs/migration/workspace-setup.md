@@ -63,11 +63,12 @@ After the Rust startup/tray and Settings framework are proven, inventory source-
 ## Current status
 
 - The Rust app is wired as the active implementation path; `.reference` remains excluded and C# sources remain available for comparison.
-- MSVC `cargo fmt --check`, 59 Rust tests, strict Clippy with `-D warnings`, and a Release build have passed in the latest verification cycle. GPUI's transitive `proc-macro-error2` dependency still emits a future-compatibility notice.
-- Remaining work includes exact settings/dashboard visual parity, shell icon parity, live Windows validation, installer/package validation, and review of remaining C# logic against Rust. See [`ui-parity.md`](ui-parity.md) for the current detailed ledger.
+- MSVC `cargo fmt --check`, 68 Rust tests, strict Clippy with `-D warnings`, and a Release build have passed in the latest verification cycle. The C# suite also passes all 436 tests. Recent parity work restored C#-matching switch timing, minimized-window activation policy, post-launch elevation monitoring, overlay refresh behavior, dynamic binding pinning, Settings validation feedback, Spotlight catalog sources/ranking, session-usage ordering, Unicode matching, and executable/package icon conversion. GPUI's transitive `proc-macro-error2` dependency still emits a future-compatibility notice.
+- Remaining work includes exact settings/dashboard visual parity, exact shell-icon raster comparison, live Windows validation, installer install/upgrade validation, and review of remaining C# logic against Rust. Native Inno Setup compilation and package-content checks now pass; see [`ui-parity.md`](ui-parity.md) for the current detailed ledger.
 
 ### First GPUI check (2026-11-05)
 
 - Pinned `gpui = 0.2.2` with Windows manifest and MSVC Rust toolchain. `cargo check --locked`, `cargo build --locked`, `cargo test --locked` and format check passed. The single test verifies that only the explicit preview flag opens the UI.
-- The user confirmed the dark GPUI window appears on screen. The computer capture tool showed unrelated desktop content, so automated visual comparison remains unavailable. Do not claim pixel parity without user screenshots or another reliable capture.
+- The Rust process was also checked on the current Windows desktop: normal startup remained resident as a tray-only process, but the tray/GPUI preview windows were not exposed as targetable windows to the automation capture surface. Live focus, placement, and pixel parity therefore remain unverified; do not claim them without user screenshots or another reliable capture.
+- A fresh Release-binary check on 2026-11-07 reproduced that result: the process stayed resident and responsive, but Computer Use returned no targetable Rust window. The validation process was stopped after the check.
 - At the initial UI preview stage, interactions were local draft state and the tray, settings storage, hooks and window switching were not connected. That historical status was superseded by the Rust runtime implementation; current gaps are listed above and in `ui-parity.md`.
