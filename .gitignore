@@ -6,6 +6,10 @@
 [Bb]in/
 [Oo]bj/
 
+# Rust build artifacts
+target/
+**/*.rs.bk
+
 # dot dirs
 .vs/
 .tmp/
@@ -23,3 +27,4 @@
 
 
 /.reference/
+/native-probe/
