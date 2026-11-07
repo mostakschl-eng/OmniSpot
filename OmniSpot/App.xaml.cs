@@ -119,7 +119,7 @@ public partial class App
                 _hook?.SetOverlayPreviewEnabled(settingsState.OverlayEnabled);
             }
         };
-        _serviceProvider.GetRequiredService<IAppSearchProvider>().WarmUp();
+        _serviceProvider.GetRequiredService<RustSearchBackend>().WarmUp();
 
         _statsService = _serviceProvider.GetRequiredService<StatsService>();
         _statsService.Start(config.StatsEnabled);

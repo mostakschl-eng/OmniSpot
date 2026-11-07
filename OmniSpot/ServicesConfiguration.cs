@@ -103,10 +103,8 @@ internal static class ServicesConfiguration
         services.AddSingleton<AppOverlayViewModel>();
 
         // spotlight
-        services.AddSingleton<ISpotlightUsageStore, SpotlightUsageStore>();
-        services.AddSingleton<IAppSearchProvider, AppSearchProvider>();
-        services.AddTransient<IFileSearchProvider, WindowsSearchFileProvider>();
-        services.AddTransient<ISpotlightSearchService, SpotlightSearchService>();
+        services.AddSingleton<RustSearchBackend>();
+        services.AddTransient<ISpotlightSearchService, RustSpotlightSearchService>();
         services.AddSingleton<SpotlightService>();
         services.AddSingleton<SpotlightWindow>();
         services.AddSingleton<SpotlightViewModel>();
