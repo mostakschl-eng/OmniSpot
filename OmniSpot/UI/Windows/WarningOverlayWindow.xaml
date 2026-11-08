@@ -26,7 +26,7 @@
                 Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                Opacity="0.97">
+                Opacity="0.96">
             <!--
                 Inner clip border — Clip geometry (set in code-behind) rounds the bottom
                 corners without touching the outer card's drop shadow.

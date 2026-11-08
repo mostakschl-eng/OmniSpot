@@ -5,7 +5,8 @@ namespace OmniSpot.Spotlight;
 public enum SearchResultType
 {
     App,
-    File
+    File,
+    Folder
 }
 
 public sealed record SearchResult(

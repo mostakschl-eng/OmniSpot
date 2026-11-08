@@ -15,7 +15,8 @@ internal sealed record SettingsSnapshot(
     bool DynamicModeEnabled,
     bool StatsEnabled,
     bool SpotlightEnabled = true,
-    Key SpotlightModifierKey = Key.LeftAlt)
+    Key SpotlightModifierKey = Key.LeftAlt,
+    IReadOnlyList<string>? SpotlightCustomDirectories = null)
 {
     // This is needed because regular record equality would do only reference comparison for Applications collection
     public bool Equals(SettingsSnapshot? other)
@@ -24,6 +25,10 @@ internal sealed record SettingsSnapshot(
         {
             return false;
         }
+
+        var customDirsEqual = (SpotlightCustomDirectories is null && other.SpotlightCustomDirectories is null) ||
+                              (SpotlightCustomDirectories is not null && other.SpotlightCustomDirectories is not null &&
+                               SpotlightCustomDirectories.SequenceEqual(other.SpotlightCustomDirectories, StringComparer.OrdinalIgnoreCase));
 
         return ModifierKey == other.ModifierKey &&
                PulseBorderEnabled == other.PulseBorderEnabled &&
@@ -36,6 +41,7 @@ internal sealed record SettingsSnapshot(
                StatsEnabled == other.StatsEnabled &&
                SpotlightEnabled == other.SpotlightEnabled &&
                SpotlightModifierKey == other.SpotlightModifierKey &&
+               customDirsEqual &&
                Applications.SequenceEqual(other.Applications);
     }
 

@@ -175,6 +175,7 @@ internal sealed class KeyStateMachine
 
         var previousState = _state;
         _state = State.Idle;
+        _heldKeyboardModifiers.Clear();
 
         var hasSideEffect = ModifierKeysWithSideEffects.Contains(key);
 
@@ -198,6 +199,7 @@ internal sealed class KeyStateMachine
     public void Reset()
     {
         _state = State.Idle;
+        _heldKeyboardModifiers.Clear();
         ResetAltTabState();
     }
 

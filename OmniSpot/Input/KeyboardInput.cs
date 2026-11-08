@@ -91,4 +91,50 @@ internal static class KeyboardInput
     }
 
     private static bool IsExtendedKey(Key key) => key is Key.RightCtrl or Key.RightAlt or Key.Apps;
+
+    /// <summary>
+    /// Checks whether the given key is physically held down at the hardware/OS level.
+    /// This prevents stuck state when Windows drops a KeyUp event (e.g. during elevation or desktop transitions).
+    /// </summary>
+    public static bool IsKeyPhysicallyDown(Key key)
+    {
+        if (key == Key.System)
+        {
+            return (PInvoke.GetAsyncKeyState((int)VIRTUAL_KEY.VK_MENU) & 0x8000) != 0;
+        }
+
+        var vk = KeyInterop.VirtualKeyFromKey(key);
+        if (vk == 0)
+        {
+            return false;
+        }
+
+        if ((PInvoke.GetAsyncKeyState(vk) & 0x8000) != 0)
+        {
+            return true;
+        }
+
+        if (key is Key.LeftAlt or Key.RightAlt)
+        {
+            return (PInvoke.GetAsyncKeyState((int)VIRTUAL_KEY.VK_MENU) & 0x8000) != 0;
+        }
+
+        if (key is Key.LeftCtrl or Key.RightCtrl)
+        {
+            return (PInvoke.GetAsyncKeyState((int)VIRTUAL_KEY.VK_CONTROL) & 0x8000) != 0;
+        }
+
+        if (key is Key.LeftShift or Key.RightShift)
+        {
+            return (PInvoke.GetAsyncKeyState((int)VIRTUAL_KEY.VK_SHIFT) & 0x8000) != 0;
+        }
+
+        if (key is Key.LWin or Key.RWin)
+        {
+            return (PInvoke.GetAsyncKeyState((int)VIRTUAL_KEY.VK_LWIN) & 0x8000) != 0 ||
+                   (PInvoke.GetAsyncKeyState((int)VIRTUAL_KEY.VK_RWIN) & 0x8000) != 0;
+        }
+
+        return false;
+    }
 }

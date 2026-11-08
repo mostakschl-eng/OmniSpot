@@ -8,14 +8,14 @@ internal sealed class RustSpotlightSearchService(
         string query,
         CancellationToken cancellationToken = default)
     {
-        var results = await backend.SearchIndexedAsync(query.Trim(), 8, null, cancellationToken);
+        var results = await backend.SearchIndexedAsync(query.Trim(), 16, null, cancellationToken);
         return await Task.Run(() => EnrichWithIcons(results), cancellationToken);
     }
 
     public async Task<IReadOnlyList<SearchResult>> GetSuggestionsAsync(
         CancellationToken cancellationToken = default)
     {
-        var results = await backend.SearchIndexedAsync(string.Empty, 8, SearchResultType.App, cancellationToken);
+        var results = await backend.SearchIndexedAsync(string.Empty, 10, SearchResultType.App, cancellationToken);
         return await Task.Run(() => EnrichWithIcons(results), cancellationToken);
     }
 

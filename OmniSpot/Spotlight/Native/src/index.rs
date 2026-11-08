@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-const CURRENT_INDEX_VERSION: u32 = 3;
-const MAX_INDEXED_FILES: usize = 10_000;
+const CURRENT_INDEX_VERSION: u32 = 5;
+const MAX_INDEXED_FILES: usize = 50_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct IndexedEntry {
@@ -96,7 +96,7 @@ impl SearchIndex {
         for app in extra_apps {
             let target_key = app.target.to_ascii_lowercase();
             if seen.insert(target_key) {
-                let base = if app.base_score > 0 { app.base_score } else { 550 };
+                let base = if app.base_score > 0 { app.base_score } else { 80 };
                 entries.push(create_entry(&app.title, &app.target, &app.alternate_name, "App", base));
             }
         }
@@ -113,15 +113,27 @@ impl SearchIndex {
             } else if is_user_profile_root(root) {
                 let docs = root.join("Documents");
                 if docs.is_dir() {
-                    scan_file_directory(&docs, 0, 3, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                    scan_file_directory(&docs, 0, 5, &mut entries, &mut seen, MAX_INDEXED_FILES);
                 }
                 let downloads = root.join("Downloads");
                 if downloads.is_dir() {
-                    scan_file_directory(&downloads, 0, 2, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                    scan_file_directory(&downloads, 0, 4, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                }
+                let videos = root.join("Videos");
+                if videos.is_dir() {
+                    scan_file_directory(&videos, 0, 5, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                }
+                let pictures = root.join("Pictures");
+                if pictures.is_dir() {
+                    scan_file_directory(&pictures, 0, 4, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                }
+                let music = root.join("Music");
+                if music.is_dir() {
+                    scan_file_directory(&music, 0, 4, &mut entries, &mut seen, MAX_INDEXED_FILES);
                 }
             } else {
                 scan_app_directory(root, 0, 3, &mut entries, &mut seen);
-                scan_file_directory(root, 0, 3, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                scan_file_directory(root, 0, 5, &mut entries, &mut seen, MAX_INDEXED_FILES);
             }
             if entries.len() >= MAX_INDEXED_FILES {
                 break;
@@ -159,18 +171,58 @@ impl SearchIndex {
     ) {
         // Reuse persisted snapshot on startup for instant readiness.
         if !self.entries.is_empty() {
-            self.roots = roots.to_vec();
-            self.extra_apps = extra_apps.to_vec();
-            self.persistence_path = Some(persistence_path.to_path_buf());
-            self.dirty = false;
-            self.last_refresh = Some(SystemTime::now());
-
             let mut existing_targets: HashSet<String> = self
                 .entries
                 .iter()
                 .map(|e| e.target.to_ascii_lowercase())
                 .collect();
             let mut added = false;
+
+            // Scan any newly configured roots
+            for root in roots {
+                if !root.is_dir() {
+                    continue;
+                }
+                if !self.roots.contains(root) {
+                    let root_str = root.to_string_lossy().to_ascii_lowercase();
+                    if root_str.contains("start menu") || root_str.contains("programs") || root_str.ends_with("windowsapps") {
+                        scan_app_directory(root, 0, 3, &mut self.entries, &mut existing_targets);
+                    } else if root_str.contains("program files") {
+                        scan_app_directory(root, 0, 2, &mut self.entries, &mut existing_targets);
+                    } else if is_user_profile_root(root) {
+                        let docs = root.join("Documents");
+                        if docs.is_dir() {
+                            scan_file_directory(&docs, 0, 5, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
+                        }
+                        let downloads = root.join("Downloads");
+                        if downloads.is_dir() {
+                            scan_file_directory(&downloads, 0, 4, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
+                        }
+                        let videos = root.join("Videos");
+                        if videos.is_dir() {
+                            scan_file_directory(&videos, 0, 5, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
+                        }
+                        let pictures = root.join("Pictures");
+                        if pictures.is_dir() {
+                            scan_file_directory(&pictures, 0, 4, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
+                        }
+                        let music = root.join("Music");
+                        if music.is_dir() {
+                            scan_file_directory(&music, 0, 4, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
+                        }
+                    } else {
+                        scan_app_directory(root, 0, 3, &mut self.entries, &mut existing_targets);
+                        scan_file_directory(root, 0, 5, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
+                    }
+                    added = true;
+                }
+            }
+
+            self.roots = roots.to_vec();
+            self.extra_apps = extra_apps.to_vec();
+            self.persistence_path = Some(persistence_path.to_path_buf());
+            self.dirty = false;
+            self.last_refresh = Some(SystemTime::now());
 
             for tool in seed_windows_tools() {
                 if existing_targets.insert(tool.target.to_ascii_lowercase()) {
@@ -188,7 +240,7 @@ impl SearchIndex {
 
             for app in extra_apps {
                 if existing_targets.insert(app.target.to_ascii_lowercase()) {
-                    let base = if app.base_score > 0 { app.base_score } else { 550 };
+                    let base = if app.base_score > 0 { app.base_score } else { 80 };
                     self.entries.push(create_entry(&app.title, &app.target, &app.alternate_name, "App", base));
                     added = true;
                 }
@@ -198,7 +250,9 @@ impl SearchIndex {
                 if entry.normalized_title.is_empty() {
                     entry.normalized_title = normalize(&entry.title);
                     entry.normalized_alternate_name = normalize(&entry.alternate_name);
-                    entry.character_mask = compute_mask(&entry.normalized_title);
+                    let tm = compute_mask(&entry.normalized_title);
+                    let am = compute_mask(&entry.normalized_alternate_name);
+                    entry.character_mask = [tm[0] | am[0], tm[1] | am[1]];
                 }
             }
             if added {
@@ -271,6 +325,66 @@ impl SearchIndex {
                 .collect();
         }
 
+        // 1. Direct real-time path browsing (e.g. C:\, D:\, C:\Users\, ~\...)
+        if let Some(browse_results) = browse_directory(trimmed, max_results) {
+            if !browse_results.is_empty() {
+                return browse_results;
+            }
+        }
+
+        // 2. Extension filter parsing (e.g. ext:pdf, *.rs, pdf: invoice)
+        let (ext_filter, clean_query) = parse_extension_filter(trimmed);
+        if let Some(target_ext) = ext_filter {
+            let mut matches: Vec<(&IndexedEntry, i32)> = Vec::new();
+            let norm_clean = normalize(&clean_query);
+            let clean_mask = compute_mask(&norm_clean);
+
+            for entry in &self.entries {
+                if entry.result_type != "File" {
+                    continue;
+                }
+                let path = Path::new(&entry.target);
+                let entry_ext = match path.extension().and_then(|s| s.to_str()) {
+                    Some(ext) => ext.to_ascii_lowercase(),
+                    None => continue,
+                };
+                if entry_ext != target_ext {
+                    continue;
+                }
+
+                if norm_clean.is_empty() {
+                    matches.push((entry, 800 + entry.usage_boost));
+                } else if let Some(fuzzy) = score_query(
+                    &norm_clean,
+                    clean_mask,
+                    &entry.normalized_title,
+                    &entry.normalized_alternate_name,
+                    entry.character_mask,
+                ) {
+                    let mut score = fuzzy + 200 + entry.usage_boost;
+                    let target_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(&entry.title);
+                    if target_stem.eq_ignore_ascii_case(&norm_clean) {
+                        score += 100;
+                    }
+                    matches.push((entry, score));
+                }
+            }
+
+            matches.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+            return matches
+                .into_iter()
+                .take(max_results)
+                .map(|(entry, score)| IndexedResult {
+                    title: entry.title.clone(),
+                    subtitle: entry.target.clone(),
+                    target: entry.target.clone(),
+                    result_type: entry.result_type.clone(),
+                    score,
+                    icon_path: entry.target.clone(),
+                })
+                .collect();
+        }
+
         let norm_query = normalize(trimmed);
         if norm_query.is_empty() {
             return Vec::new();
@@ -290,18 +404,50 @@ impl SearchIndex {
         let mut matched_indices = Vec::new();
         let mut scored_matches = Vec::new();
 
+        let evaluate_entry = |entry: &IndexedEntry| -> Option<i32> {
+            let fuzzy_score = score_query(
+                &norm_query,
+                query_mask,
+                &entry.normalized_title,
+                &entry.normalized_alternate_name,
+                entry.character_mask,
+            )?;
+
+            let mut total_score = fuzzy_score + entry.base_score + entry.usage_boost;
+            let target_stem = Path::new(&entry.target)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&entry.target);
+
+            if target_stem.eq_ignore_ascii_case(&norm_query) {
+                total_score += 60;
+            }
+
+            if entry.target.contains(".com-") || entry.target.contains(".org-") || entry.target.contains(".app-") {
+                total_score -= 40;
+            }
+
+            if entry.result_type == "File" {
+                let lower_target = entry.target.to_ascii_lowercase();
+                if lower_target.contains("\\node_modules\\")
+                    || lower_target.contains("\\target\\")
+                    || lower_target.contains("\\bin\\")
+                    || lower_target.contains("\\obj\\")
+                    || lower_target.contains("\\.git\\")
+                    || lower_target.contains("\\temp\\")
+                {
+                    total_score -= 150;
+                }
+            }
+
+            Some(total_score)
+        };
+
         if let Some(cached_ids) = cached_subset {
             for idx in cached_ids {
                 let idx_usize = idx as usize;
                 if let Some(entry) = self.entries.get(idx_usize) {
-                    if let Some(fuzzy_score) = score_query(
-                        &norm_query,
-                        query_mask,
-                        &entry.normalized_title,
-                        &entry.normalized_alternate_name,
-                        entry.character_mask,
-                    ) {
-                        let total_score = fuzzy_score + entry.base_score + entry.usage_boost;
+                    if let Some(total_score) = evaluate_entry(entry) {
                         matched_indices.push(idx);
                         scored_matches.push(ScoredCandidate { index: idx, score: total_score });
                     }
@@ -310,14 +456,7 @@ impl SearchIndex {
         } else {
             for (idx, entry) in self.entries.iter().enumerate() {
                 let idx = idx as u32;
-                if let Some(fuzzy_score) = score_query(
-                    &norm_query,
-                    query_mask,
-                    &entry.normalized_title,
-                    &entry.normalized_alternate_name,
-                    entry.character_mask,
-                ) {
-                    let total_score = fuzzy_score + entry.base_score + entry.usage_boost;
+                if let Some(total_score) = evaluate_entry(entry) {
                     matched_indices.push(idx);
                     scored_matches.push(ScoredCandidate { index: idx, score: total_score });
                 }
@@ -395,7 +534,9 @@ fn create_entry(
 ) -> IndexedEntry {
     let normalized_title = normalize(title);
     let normalized_alternate_name = normalize(alternate_name);
-    let character_mask = compute_mask(&normalized_title);
+    let title_mask = compute_mask(&normalized_title);
+    let alt_mask = compute_mask(&normalized_alternate_name);
+    let character_mask = [title_mask[0] | alt_mask[0], title_mask[1] | alt_mask[1]];
 
     IndexedEntry {
         title: title.to_string(),
@@ -437,6 +578,8 @@ fn is_uninstaller_or_helper(name: &str) -> bool {
         || lower.contains("crashpad")
         || lower.contains("installer")
         || lower.starts_with("setup")
+        || lower.contains("native-host")
+        || lower.contains("native_host")
 }
 
 fn is_skipped_dir(name: &str) -> bool {
@@ -471,11 +614,13 @@ fn is_indexable_file_ext(ext: &str) -> bool {
     matches!(
         ext,
         "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "csv" |
-        "txt" | "md" | "rtf" |
-        "zip" | "rar" | "7z" | "tar" | "gz" |
-        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" |
-        "mp4" | "mkv" | "mov" | "avi" | "mp3" | "wav" | "flac" |
-        "rs" | "cs" | "py" | "js" | "ts" | "jsx" | "tsx" | "json" | "xml" | "html" | "css" | "sql"
+        "txt" | "md" | "rtf" | "epub" | "log" |
+        "zip" | "rar" | "7z" | "tar" | "gz" | "iso" |
+        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" | "bmp" | "tiff" |
+        "mp4" | "mkv" | "mov" | "avi" | "wmv" | "flv" | "webm" | "m4v" | "mpg" | "mpeg" | "m2ts" | "3gp" |
+        "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" |
+        "rs" | "cs" | "py" | "js" | "ts" | "jsx" | "tsx" | "json" | "xml" | "html" | "css" | "sql" |
+        "exe" | "msi" | "bat" | "cmd" | "ps1" | "lnk"
     )
 }
 
@@ -485,6 +630,186 @@ fn is_skipped_file_ext(ext: &str) -> bool {
         "dll" | "sys" | "lib" | "pdb" | "obj" | "exp" | "ilk" | "tlog" |
         "tmp" | "lock" | "cache" | "class" | "meta" | "bak" | "idb"
     )
+}
+
+fn parse_extension_filter(query: &str) -> (Option<String>, String) {
+    let trimmed = query.trim();
+
+    if let Some(rest) = trimmed.strip_prefix("ext:") {
+        let mut parts = rest.splitn(2, |c: char| c.is_whitespace());
+        let ext = parts.next().unwrap_or_default().trim().trim_start_matches('.');
+        let remaining = parts.next().unwrap_or_default().trim().to_string();
+        if !ext.is_empty() {
+            return (Some(ext.to_ascii_lowercase()), remaining);
+        }
+    }
+
+    if let Some(star_pos) = trimmed.find("*.") {
+        let after_dot = &trimmed[star_pos + 2..];
+        let mut parts = after_dot.splitn(2, |c: char| c.is_whitespace());
+        let ext = parts.next().unwrap_or_default().trim();
+        if !ext.is_empty() {
+            let before = trimmed[..star_pos].trim();
+            let after = parts.next().unwrap_or_default().trim();
+            let remaining = format!("{} {}", before, after).trim().to_string();
+            return (Some(ext.to_ascii_lowercase()), remaining);
+        }
+    }
+
+    if let Some((possible_ext, remaining)) = trimmed.split_once(':') {
+        let candidate_ext = possible_ext.trim().to_ascii_lowercase();
+        if is_indexable_file_ext(&candidate_ext) {
+            return (Some(candidate_ext), remaining.trim().to_string());
+        }
+    }
+
+    (None, trimmed.to_string())
+}
+
+fn is_path_query(query: &str) -> bool {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return true;
+    }
+    if trimmed.starts_with('\\') || trimmed.starts_with('/') {
+        return true;
+    }
+    if trimmed.starts_with(".\\")
+        || trimmed.starts_with("./")
+        || trimmed.starts_with("..\\")
+        || trimmed.starts_with("../")
+        || trimmed.starts_with("~\\")
+        || trimmed.starts_with("~/")
+        || trimmed.starts_with('%')
+    {
+        return true;
+    }
+    false
+}
+
+fn expand_path(raw: &str) -> PathBuf {
+    let mut expanded = raw.trim().to_string();
+
+    if expanded.starts_with('%') {
+        if let Some(second_pct) = expanded[1..].find('%') {
+            let var_name = &expanded[1..=second_pct];
+            if let Ok(val) = std::env::var(var_name) {
+                expanded = format!("{}{}", val, &expanded[second_pct + 2..]);
+            }
+        }
+    }
+
+    if expanded.starts_with('~') {
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            let rest = expanded
+                .strip_prefix('~')
+                .unwrap_or_default()
+                .trim_start_matches(['\\', '/']);
+            if rest.is_empty() {
+                expanded = profile;
+            } else {
+                expanded = format!("{}\\{}", profile, rest);
+            }
+        }
+    }
+
+    PathBuf::from(expanded)
+}
+
+fn browse_directory(query: &str, max_results: usize) -> Option<Vec<IndexedResult>> {
+    if !is_path_query(query) {
+        return None;
+    }
+
+    let target_path = expand_path(query);
+
+    let (dir_to_scan, filter_str) = if target_path.is_dir() {
+        (target_path, String::new())
+    } else if let Some(parent) = target_path.parent() {
+        if parent.is_dir() {
+            let filter = target_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_string();
+            (parent.to_path_buf(), filter)
+        } else {
+            return None;
+        }
+    } else {
+        return None;
+    };
+
+    let read_dir = fs::read_dir(&dir_to_scan).ok()?;
+    let mut entries = Vec::new();
+    let filter_lower = filter_str.to_ascii_lowercase();
+
+    for item in read_dir.flatten() {
+        let path = item.path();
+        let file_name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        if file_name.starts_with('.') || file_name.starts_with('$') {
+            continue;
+        }
+
+        let is_dir = path.is_dir();
+        let result_type = if is_dir { "Folder" } else { "File" };
+
+        let score = if filter_lower.is_empty() {
+            if is_dir {
+                900
+            } else {
+                850
+            }
+        } else {
+            let name_lower = file_name.to_ascii_lowercase();
+            if name_lower.starts_with(&filter_lower) {
+                if is_dir {
+                    950
+                } else {
+                    920
+                }
+            } else if name_lower.contains(&filter_lower) {
+                if is_dir {
+                    880
+                } else {
+                    840
+                }
+            } else if let Some(fuzzy) = crate::matcher::score_text(&filter_lower, file_name) {
+                fuzzy + if is_dir { 100 } else { 50 }
+            } else {
+                continue;
+            }
+        };
+
+        entries.push(IndexedResult {
+            title: file_name.to_string(),
+            subtitle: path.to_string_lossy().to_string(),
+            target: path.to_string_lossy().to_string(),
+            result_type: result_type.to_string(),
+            score,
+            icon_path: path.to_string_lossy().to_string(),
+        });
+    }
+
+    entries.sort_unstable_by(|a, b| {
+        let a_is_folder = a.result_type == "Folder";
+        let b_is_folder = b.result_type == "Folder";
+        b_is_folder
+            .cmp(&a_is_folder)
+            .then_with(|| b.score.cmp(&a.score))
+            .then_with(|| a.title.to_ascii_lowercase().cmp(&b.title.to_ascii_lowercase()))
+    });
+
+    entries.truncate(max_results);
+    Some(entries)
 }
 
 fn scan_app_directory(
@@ -545,7 +870,7 @@ fn scan_app_directory(
             path.to_string_lossy().as_ref(),
             alt,
             "App",
-            550,
+            80,
         ));
     }
 }
@@ -649,8 +974,12 @@ fn enumerate_shell_apps() -> Vec<IndexedEntry> {
                         };
 
                         if !name.is_empty() && !target.is_empty() && !name.starts_with('{') && !target.ends_with(".url") {
+                            if is_uninstaller_or_helper(&name) || is_uninstaller_or_helper(&target) {
+                                continue;
+                            }
                             let alt = name.replace(' ', "");
-                            apps.push(create_entry(&name, &target, &alt, "App", 550));
+                            let base = if target.contains(".com-") || target.contains(".org-") || target.contains(".app-") { 50 } else { 80 };
+                            apps.push(create_entry(&name, &target, &alt, "App", base));
                         }
                     }
                 }
@@ -691,7 +1020,7 @@ fn seed_windows_tools() -> Vec<IndexedEntry> {
             target.to_string_lossy().as_ref(),
             alt,
             "App",
-            600,
+            90,
         ));
     }
 
@@ -713,7 +1042,7 @@ fn seed_windows_tools() -> Vec<IndexedEntry> {
             target,
             alt,
             "App",
-            550,
+            85,
         ));
     }
 
@@ -800,7 +1129,7 @@ mod tests {
                 title: "ChatGPT".to_string(),
                 target: "OpenAI.Codex_2p2nqsd0c76g0!App".to_string(),
                 alternate_name: "OpenAI Codex chatgpt".to_string(),
-                base_score: 550,
+                base_score: 80,
             }
         ];
         let persistence = std::env::temp_dir().join(format!("omnispot-extra-app-test-{}.json", std::process::id()));
@@ -874,6 +1203,31 @@ mod tests {
     }
 
     #[test]
+    fn google_chrome_ranks_above_chrome_remote_desktop() {
+        let mut index = SearchIndex::default();
+        index.entries = vec![
+            super::create_entry(
+                "Chrome Remote Desktop",
+                "remotedesktop.google.com-906A0B3D_h2dphjv1brgng!App",
+                "ChromeRemoteDesktop",
+                "App",
+                50,
+            ),
+            super::create_entry(
+                "Google Chrome",
+                "Chrome",
+                "GoogleChrome",
+                "App",
+                80,
+            ),
+        ];
+
+        let results = index.search("chrome", 5);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].title, "Google Chrome");
+    }
+
+    #[test]
     fn deduplicates_duplicate_apps() {
         let mut index = SearchIndex::default();
         index.entries = vec![
@@ -907,5 +1261,131 @@ mod tests {
         assert!(!results.is_empty());
         assert_eq!(results[0].title, "Task Manager");
         assert!(duration.as_millis() < 5, "Search took too long: {:?}", duration);
+    }
+
+    #[test]
+    fn parses_extension_filters_correctly() {
+        let (ext1, q1) = super::parse_extension_filter("ext:pdf");
+        assert_eq!(ext1, Some("pdf".to_string()));
+        assert_eq!(q1, "");
+
+        let (ext2, q2) = super::parse_extension_filter("ext:docx annual report");
+        assert_eq!(ext2, Some("docx".to_string()));
+        assert_eq!(q2, "annual report");
+
+        let (ext3, q3) = super::parse_extension_filter("*.rs engine");
+        assert_eq!(ext3, Some("rs".to_string()));
+        assert_eq!(q3, "engine");
+
+        let (ext4, q4) = super::parse_extension_filter("pdf: invoice");
+        assert_eq!(ext4, Some("pdf".to_string()));
+        assert_eq!(q4, "invoice");
+
+        let (ext5, q5) = super::parse_extension_filter("chrome");
+        assert_eq!(ext5, None);
+        assert_eq!(q5, "chrome");
+    }
+
+    #[test]
+    fn searches_by_file_extension() {
+        let mut index = SearchIndex::default();
+        index.entries = vec![
+            super::create_entry("Annual Report", "C:\\Docs\\report.pdf", "report.pdf", "File", 0),
+            super::create_entry("Tax Summary", "C:\\Docs\\tax.pdf", "tax.pdf", "File", 0),
+            super::create_entry("Rust Backend", "C:\\Dev\\engine.rs", "engine.rs", "File", 0),
+            super::create_entry("Notes", "C:\\Docs\\notes.txt", "notes.txt", "File", 0),
+        ];
+
+        let pdf_results = index.search("ext:pdf", 10);
+        assert_eq!(pdf_results.len(), 2);
+        assert!(pdf_results.iter().all(|r| r.target.ends_with(".pdf")));
+
+        let rs_results = index.search("*.rs engine", 10);
+        assert_eq!(rs_results.len(), 1);
+        assert_eq!(rs_results[0].title, "Rust Backend");
+    }
+
+    #[test]
+    fn browses_local_directory_in_realtime() {
+        let temp_dir = std::env::temp_dir().join(format!("omnispot-dir-browse-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("SubFolderA")).unwrap();
+        fs::create_dir_all(temp_dir.join("SubFolderB")).unwrap();
+        fs::write(temp_dir.join("Document.pdf"), b"pdf").unwrap();
+        fs::write(temp_dir.join("Source.rs"), b"rs").unwrap();
+
+        let index = SearchIndex::default();
+        let browse_query = format!("{}\\", temp_dir.display());
+        let results = index.search(&browse_query, 10);
+
+        assert!(results.len() >= 4);
+        // Folders must be listed before files
+        assert_eq!(results[0].result_type, "Folder");
+        assert_eq!(results[1].result_type, "Folder");
+
+        // Partial filter in directory
+        let filter_query = format!("{}\\Doc", temp_dir.display());
+        let filtered = index.search(&filter_query, 10);
+        assert!(!filtered.is_empty());
+        assert_eq!(filtered[0].title, "Document.pdf");
+        assert_eq!(filtered[0].result_type, "File");
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn smart_ranking_shows_files_and_apps_without_starvation() {
+        let mut index = SearchIndex::default();
+        index.entries = vec![
+            super::create_entry(
+                "Google Chrome",
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                "chrome.exe",
+                "App",
+                80,
+            ),
+            super::create_entry(
+                "Chrome Remote Desktop",
+                "remotedesktop.google.com-906A0B3D_h2dphjv1brgng!App",
+                "ChromeRemoteDesktop",
+                "App",
+                50,
+            ),
+            super::create_entry(
+                "codex-chrome-native-host",
+                "C:\\Tools\\codex-chrome-native-host.exe",
+                "codex-chrome-native-host",
+                "App",
+                80,
+            ),
+            super::create_entry(
+                "chrome_shortcuts",
+                "C:\\Docs\\chrome_shortcuts.pdf",
+                "chrome_shortcuts.pdf",
+                "File",
+                0,
+            ),
+            super::create_entry(
+                "Quarterly Financial Statement 2026",
+                "C:\\Docs\\Quarterly_Financial_Statement_2026.xlsx",
+                "Quarterly_Financial_Statement_2026.xlsx",
+                "File",
+                0,
+            ),
+        ];
+
+        // 1. Searching "chrome": Google Chrome is top app, file is included in top results (not hidden!)
+        let chrome_results = index.search("chrome", 10);
+        assert!(!chrome_results.is_empty());
+        assert_eq!(chrome_results[0].title, "Google Chrome");
+        assert_eq!(chrome_results[0].result_type, "App");
+        assert!(chrome_results.iter().any(|r| r.title == "chrome_shortcuts" && r.result_type == "File"),
+            "Matching file must not be starved out by apps");
+
+        // 2. Searching full file name: file ranks at the top #1!
+        let file_results = index.search("Quarterly Financial Statement", 5);
+        assert!(!file_results.is_empty());
+        assert_eq!(file_results[0].title, "Quarterly Financial Statement 2026");
+        assert_eq!(file_results[0].result_type, "File");
     }
 }

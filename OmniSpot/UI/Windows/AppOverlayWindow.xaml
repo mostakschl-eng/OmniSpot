@@ -122,7 +122,7 @@
                 Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                Opacity="0.95">
+                Opacity="0.96">
         <StackPanel>
 
             <!-- Windows for configured NextWindow apps -->

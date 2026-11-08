@@ -23,7 +23,8 @@ internal record Configuration(
     bool DynamicModeEnabled,
     bool StatsEnabled,
     bool SpotlightEnabled = true,
-    Key SpotlightModifier = Key.LeftAlt);
+    Key SpotlightModifier = Key.LeftAlt,
+    IReadOnlyList<string>? SpotlightCustomDirectories = null);
 
 [DebuggerDisplay("{Key} -> {ProcessName} (Type: {Type}, CycleMode: {CycleMode}, StartProcess: {StartIfNotRunning})")]
 public record ApplicationConfiguration(

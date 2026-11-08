@@ -59,5 +59,70 @@ public class RustSearchBackendTests
         // Assert
         resolvedIcon.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task SearchIndexedAsync_BrowsesDirectory_WhenQueryIsPath()
+    {
+        // Arrange
+        _sut.WarmUp();
+        var windowsPath = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + "\\";
+
+        // Act
+        var results = await _sut.SearchIndexedAsync(windowsPath, 10, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        results.Should().NotBeEmpty();
+        results.Should().Contain(r => r.Type == SearchResultType.Folder);
+    }
+
+    [Fact]
+    public void SpotlightIconService_ResolvesIcon_ForFolder()
+    {
+        // Arrange
+        System.Windows.Media.ImageSource? resolvedIcon = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            var iconExtractor = new OmniSpot.WindowDiscovery.IconExtractor();
+            var sut = new SpotlightIconService(iconExtractor);
+
+            // Act
+            resolvedIcon = sut.GetIcon(Environment.GetFolderPath(Environment.SpecialFolder.Windows), SearchResultType.Folder);
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        // Assert
+        resolvedIcon.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AppOverlayWindow_CanInitialize_WithoutXamlParseException()
+    {
+        // Arrange
+        Exception? exception = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                if (System.Windows.Application.Current == null)
+                {
+                    _ = new System.Windows.Application();
+                }
+                var vm = new OmniSpot.UI.ViewModels.AppOverlayViewModel();
+                _ = new OmniSpot.UI.Windows.AppOverlayWindow(vm);
+            }
+            catch (Exception ex)
+            {
+                exception = ex;
+            }
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        // Assert
+        exception.Should().BeNull();
+    }
 }
 

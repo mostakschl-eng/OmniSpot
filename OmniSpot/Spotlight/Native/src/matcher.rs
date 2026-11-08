@@ -73,10 +73,16 @@ pub(crate) fn compute_mask(value: &str) -> [u64; 2] {
     mask
 }
 
-#[cfg(test)]
 pub(crate) fn score_text(query: &str, candidate: &str) -> Option<i32> {
     let normalized = normalize(candidate);
     score_normalized(query, &normalized)
+}
+
+fn is_vendor_prefix(word: &str) -> bool {
+    matches!(
+        word,
+        "google" | "microsoft" | "adobe" | "mozilla" | "apple" | "jetbrains"
+    )
 }
 
 pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
@@ -87,16 +93,65 @@ pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
     if normalized == query {
         return Some(1_000);
     }
-    if normalized.starts_with(query) {
-        return Some(920);
+
+    // Compound / CamelCase match without spaces (e.g. "chatgpt" matches "chat gpt" / "ChatGPT", "omnispot" matches "omni spot")
+    if !query.contains(' ') && normalized.contains(' ') {
+        let unspaced: String = normalized.chars().filter(|c| *c != ' ').collect();
+        if unspaced == query {
+            return Some(1_000);
+        }
+        if unspaced.starts_with(query) {
+            let length_penalty = ((unspaced.len() - query.len()) as i32 * 6).min(50);
+            return Some((940 - length_penalty).max(880));
+        }
     }
 
-    if normalized.split(' ').any(|token| !token.is_empty() && token.starts_with(query)) {
-        return Some(880);
+    let tokens: Vec<&str> = normalized.split(' ').filter(|token| !token.is_empty()).collect();
+
+    // 1. Exact token match (e.g. query "chrome" matching word "chrome" in "Google Chrome" or "Chrome Remote Desktop")
+    if let Some(token_pos) = tokens.iter().position(|&token| token == query) {
+        if tokens.len() == 1 {
+            return Some(1_000);
+        }
+
+        // Canonical vendor product pattern: "Google Chrome", "Mozilla Firefox", "Microsoft Edge", "Microsoft Word"
+        // If the first word is a known vendor and an exact token match is the product:
+        if tokens.len() == 2 && is_vendor_prefix(tokens[0]) && token_pos == 1 {
+            return Some(1_000);
+        }
+
+        // Exact match on the first token: "Chrome ..."
+        if token_pos == 0 {
+            // Penalize long modifier titles: "Chrome Remote Desktop" (3 words) -> 905 vs 2 words -> 940
+            let length_penalty = ((tokens.len() - 1) as i32 * 25)
+                + (((normalized.len() - query.len()) as i32) / 3).min(35);
+            return Some((960 - length_penalty).max(890));
+        }
+
+        // Exact token match at position > 0:
+        // Shorter titles rank higher: "Google Chrome" (len 2) -> 945 vs longer compound titles
+        let length_penalty = ((tokens.len() - 2) as i32 * 25)
+            + (((normalized.len() - query.len()) as i32) / 4).min(30);
+        return Some((945 - length_penalty).max(870));
+    }
+
+    // 2. Full title prefix: normalized starts with query
+    if normalized.starts_with(query) {
+        let length_penalty = ((tokens.len().saturating_sub(1)) as i32 * 15)
+            + (((normalized.len() - query.len()) as i32) / 4).min(25);
+        return Some((920 - length_penalty).max(860));
+    }
+
+    // 3. Any token starts with query
+    if let Some(token_pos) = tokens.iter().position(|token| token.starts_with(query)) {
+        if tokens.len() == 2 && is_vendor_prefix(tokens[0]) && token_pos == 1 {
+            return Some(910);
+        }
+        let length_penalty = (tokens.len().saturating_sub(1)) as i32 * 15;
+        return Some((880 - length_penalty).max(830));
     }
 
     if query.contains(' ') {
-        let tokens: Vec<&str> = normalized.split(' ').filter(|token| !token.is_empty()).collect();
         let query_tokens: Vec<&str> = query.split(' ').filter(|token| !token.is_empty()).collect();
         if query_tokens.len() > 1
             && query_tokens.iter().all(|query_token| {
@@ -112,10 +167,13 @@ pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
     }
 
     let mut initials = String::with_capacity(8);
-    for word in normalized.split(' ') {
+    for word in &tokens {
         if let Some(ch) = word.chars().next() {
             initials.push(ch);
         }
+    }
+    if initials == query {
+        return Some(820);
     }
     if initials.starts_with(query) {
         return Some(780);
@@ -154,6 +212,10 @@ pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
     let first = first?;
     let span = last - first + 1;
     let compactness = ((query_chars.len() * 100) / span.max(1)) as i32;
+    if compactness < 25 {
+        return None;
+    }
+
     let boundary_bonus = if first == 0 || normalized.as_bytes().get(first.wrapping_sub(1)) == Some(&b' ') {
         60
     } else {
@@ -165,17 +227,32 @@ pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
 pub(crate) fn normalize(value: &str) -> String {
     let mut normalized = String::with_capacity(value.len());
     let mut pending_space = false;
+    let mut prev_char: Option<char> = None;
+
     for character in value.trim().chars() {
-        let separator = matches!(character, ' ' | '\t' | '_' | '-' | '.');
+        let separator = matches!(
+            character,
+            ' ' | '\t' | '_' | '-' | '.' | '/' | '\\' | ':' | ';' | ',' | '(' | ')' | '[' | ']'
+        );
         if separator {
             pending_space = true;
+            prev_char = None;
             continue;
         }
+
+        // CamelCase / PascalCase boundary detection: e.g. "RustSearch" -> "rust search"
+        if let Some(prev) = prev_char {
+            if (prev.is_lowercase() || prev.is_ascii_digit()) && character.is_uppercase() {
+                pending_space = true;
+            }
+        }
+
         if pending_space && !normalized.is_empty() {
             normalized.push(' ');
         }
         pending_space = false;
         normalized.extend(character.to_lowercase());
+        prev_char = Some(character);
     }
     normalized
 }
@@ -183,6 +260,13 @@ pub(crate) fn normalize(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::score_text;
+
+    #[test]
+    fn ranks_canonical_product_above_compound_modifier_titles() {
+        let chrome_main = score_text("chrome", "Google Chrome").unwrap();
+        let chrome_pwa = score_text("chrome", "Chrome Remote Desktop").unwrap();
+        assert!(chrome_main > chrome_pwa, "Google Chrome ({}) should beat Chrome Remote Desktop ({})", chrome_main, chrome_pwa);
+    }
 
     #[test]
     fn ranks_exact_and_prefix_matches_above_fuzzy_matches() {
@@ -200,5 +284,13 @@ mod tests {
     fn handles_separator_normalization_and_acronyms() {
         assert!(score_text("control panel", "Control_Panel").is_some());
         assert!(score_text("cp", "Control Panel").is_some());
+    }
+
+    #[test]
+    fn handles_camel_case_and_compound_file_acronyms() {
+        assert!(score_text("rsb", "RustSearchBackend").is_some());
+        assert!(score_text("qr", "quarterly_report_2026.docx").is_some());
+        assert!(score_text("oss", "OmniSpotSettings").is_some());
+        assert!(score_text("upc", "user-profile-component.ts").is_some());
     }
 }

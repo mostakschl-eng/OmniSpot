@@ -100,6 +100,47 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
     private Key _spotlightModifierKey = Key.LeftAlt;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty), nameof(CanSave))]
+    private ObservableCollection<string> _spotlightCustomDirectories = [];
+
+    partial void OnSpotlightCustomDirectoriesChanged(
+        ObservableCollection<string>? oldValue,
+        ObservableCollection<string> newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.CollectionChanged -= OnCustomDirectoriesCollectionChanged;
+        }
+
+        newValue.CollectionChanged += OnCustomDirectoriesCollectionChanged;
+    }
+
+    private void OnCustomDirectoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(CanSave));
+    }
+
+    public void AddSpotlightCustomDirectory(string path)
+    {
+        if (!string.IsNullOrWhiteSpace(path) && !SpotlightCustomDirectories.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            SpotlightCustomDirectories.Add(path);
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(CanSave));
+        }
+    }
+
+    public void RemoveSpotlightCustomDirectory(string path)
+    {
+        if (SpotlightCustomDirectories.Remove(path))
+        {
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(CanSave));
+        }
+    }
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasDynamicApplications))]
     private ObservableCollection<DynamicApplicationViewModel> _dynamicApplications = [];
 
@@ -197,6 +238,7 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
         StatsEnabled = config.StatsEnabled;
         SpotlightEnabled = config.SpotlightEnabled;
         SpotlightModifierKey = config.SpotlightModifier;
+        SpotlightCustomDirectories = new ObservableCollection<string>(config.SpotlightCustomDirectories ?? []);
 
         _dirtyTracker?.Dispose();
 
@@ -317,7 +359,8 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
             DynamicModeEnabled,
             StatsEnabled,
             SpotlightEnabled,
-            SpotlightModifierKey);
+            SpotlightModifierKey,
+            SpotlightCustomDirectories.Count == 0 ? null : SpotlightCustomDirectories.ToList());
     }
 
     public ApplicationShortcutViewModel? AddApplication(ApplicationSelectionArgs args)
@@ -419,7 +462,8 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
                 DynamicModeEnabled,
                 StatsEnabled,
                 SpotlightEnabled,
-                SpotlightModifierKey);
+                SpotlightModifierKey,
+                SpotlightCustomDirectories.Count == 0 ? null : SpotlightCustomDirectories.ToList());
 
             if (_configurationManager.UpdateConfiguration(newConfig))
             {

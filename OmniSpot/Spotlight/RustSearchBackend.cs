@@ -1,3 +1,4 @@
+using OmniSpot.Configuration;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -10,16 +11,23 @@ internal sealed class RustSearchBackend
     private const string LibraryName = "omnispot_spotlight_native";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly Lazy<bool> NativeAvailable = new(IsNativeAvailable);
+    private readonly ConfigurationManager? _configManager;
     private readonly Lazy<Task> _indexInitialization;
     private readonly string _persistencePath;
 
-    public RustSearchBackend()
+    public RustSearchBackend(ConfigurationManager? configManager = null)
     {
+        _configManager = configManager;
         _indexInitialization = new Lazy<Task>(InitializeIndexAsync, LazyThreadSafetyMode.ExecutionAndPublication);
         _persistencePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "OmniSpot",
             "spotlight-index.json");
+
+        if (_configManager != null)
+        {
+            _configManager.ConfigurationChanged += OnConfigurationChanged;
+        }
     }
 
     public bool IsAvailable => NativeAvailable.Value;
@@ -34,23 +42,60 @@ internal sealed class RustSearchBackend
         _ = _indexInitialization.Value;
     }
 
+    private void OnConfigurationChanged(Configuration.Configuration config)
+    {
+        _ = Task.Run(() =>
+        {
+            if (!IsAvailable)
+            {
+                return;
+            }
+
+            var roots = BuildRoots();
+            var configBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                new RustIndexConfig(roots, _persistencePath), JsonOptions));
+            NativeInitialize(configBytes, (UIntPtr)configBytes.Length);
+        });
+    }
+
+    private string[] BuildRoots()
+    {
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var rootsList = new List<string>
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps")
+        };
+
+        if (!string.IsNullOrWhiteSpace(userProfile))
+        {
+            rootsList.Add(Path.Combine(userProfile, "Downloads"));
+        }
+
+        if (_configManager?.GetConfiguration()?.SpotlightCustomDirectories is { } customDirs)
+        {
+            rootsList.AddRange(customDirs);
+        }
+
+        return rootsList
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private Task InitializeIndexAsync()
     {
         return Task.Run(() =>
         {
-            var roots = new[]
-            {
-                Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps")
-            }.Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
-             .Distinct(StringComparer.OrdinalIgnoreCase)
-             .ToArray();
-
+            var roots = BuildRoots();
             var configBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
                 new RustIndexConfig(roots, _persistencePath), JsonOptions));
             NativeInitialize(configBytes, (UIntPtr)configBytes.Length);

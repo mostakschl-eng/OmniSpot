@@ -48,9 +48,14 @@ public partial class AppOverlayWindow : Window
     {
         var isDark = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Dark;
 
-        CardBorder.Effect = isDark
-            ? new DropShadowEffect { BlurRadius = 20, ShadowDepth = 0, Opacity = 0.25, Color = Colors.White }
-            : new DropShadowEffect { BlurRadius = 24, ShadowDepth = 8, Direction = 270, Opacity = 0.4, Color = Colors.Black };
+        CardBorder.Effect = new DropShadowEffect
+        {
+            BlurRadius = 24,
+            ShadowDepth = 8,
+            Direction = 270,
+            Opacity = isDark ? 0.45 : 0.35,
+            Color = Colors.Black
+        };
     }
 
     private void PositionWindow()

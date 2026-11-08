@@ -18,6 +18,7 @@ internal interface ISettingsState : INotifyPropertyChanged
     bool StatsEnabled { get; set; }
     bool SpotlightEnabled { get; set; }
     Key SpotlightModifierKey { get; set; }
+    ObservableCollection<string> SpotlightCustomDirectories { get; set; }
     ObservableCollection<ApplicationShortcutViewModel> Applications { get; set; }
     bool HasNoApplications { get; }
     ObservableCollection<DynamicApplicationViewModel> DynamicApplications { get; set; }
@@ -35,4 +36,6 @@ internal interface ISettingsState : INotifyPropertyChanged
     void RemoveApplication(ApplicationShortcutViewModel application);
     void MoveApplication(int oldIndex, int newIndex);
     ApplicationShortcutViewModel? PinApplication(DynamicApplicationViewModel dynamic);
+    void AddSpotlightCustomDirectory(string path);
+    void RemoveSpotlightCustomDirectory(string path);
 }

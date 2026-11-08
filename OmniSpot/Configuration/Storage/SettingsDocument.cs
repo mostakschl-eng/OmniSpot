@@ -34,6 +34,8 @@ internal class SettingsDocument
 
     public Key SpotlightModifier { get; init; } = Key.LeftAlt;
 
+    public List<string>? SpotlightCustomDirectories { get; init; }
+
     public Configuration ToConfiguration() =>
         new(
             Modifier,
@@ -47,7 +49,8 @@ internal class SettingsDocument
             DynamicModeEnabled,
             StatsEnabled,
             SpotlightEnabled,
-            SpotlightModifier);
+            SpotlightModifier,
+            SpotlightCustomDirectories);
 
     public static SettingsDocument FromConfiguration(Configuration config, int id) =>
         new()
@@ -66,6 +69,9 @@ internal class SettingsDocument
             DynamicModeEnabled = config.DynamicModeEnabled,
             StatsEnabled = config.StatsEnabled,
             SpotlightEnabled = config.SpotlightEnabled,
-            SpotlightModifier = config.SpotlightModifier
+            SpotlightModifier = config.SpotlightModifier,
+            SpotlightCustomDirectories = config.SpotlightCustomDirectories is { Count: > 0 }
+                ? config.SpotlightCustomDirectories.ToList()
+                : null
         };
 }

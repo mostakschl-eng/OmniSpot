@@ -46,31 +46,38 @@ public partial class AppOverlayViewModel : ObservableObject
     [UsedImplicitly(Reason = "Design-time constructor")]
     public AppOverlayViewModel()
     {
-        var chromeIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/chrome.png"));
-        var notepadIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/notepad.png"));
-        var explorerIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/explorer.png"));
-        var codeIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/code.png"));
+        try
+        {
+            var chromeIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/chrome.png"));
+            var notepadIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/notepad.png"));
+            var explorerIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/explorer.png"));
+            var codeIcon = new BitmapImage(new Uri("pack://application:,,,/Resources/DesignTime/code.png"));
 
-        AppWindowGroups = new ObservableCollection<OverlayWindowGroup>([
-            new("code", [
-                new(Key.D1, "Welcome - Visual Studio Code", codeIcon, IsActive: true),
-                new(Key.D2, "README.md - Visual Studio Code", codeIcon)
-            ])
-        ]);
+            AppWindowGroups = new ObservableCollection<OverlayWindowGroup>([
+                new("code", [
+                    new(Key.D1, "Welcome - Visual Studio Code", codeIcon, IsActive: true),
+                    new(Key.D2, "README.md - Visual Studio Code", codeIcon)
+                ])
+            ]);
 
-        RunningApps = new ObservableCollection<OverlayAppItem>([
-            new(Key.C, "chrome", chromeIcon, IsElevated: true),
-            new(Key.N, "notepad", notepadIcon)
-        ]);
+            RunningApps = new ObservableCollection<OverlayAppItem>([
+                new(Key.C, "chrome", chromeIcon, IsElevated: true),
+                new(Key.N, "notepad", notepadIcon)
+            ]);
 
-        LaunchableApps = new ObservableCollection<OverlayAppItem>([
-            new(Key.E, "explorer", explorerIcon)
-        ]);
+            LaunchableApps = new ObservableCollection<OverlayAppItem>([
+                new(Key.E, "explorer", explorerIcon)
+            ]);
 
-        DynamicApps = new ObservableCollection<OverlayAppItem>([
-            new(Key.S, "spotify", null),
-            new(Key.T, "terminal", null)
-        ]);
+            DynamicApps = new ObservableCollection<OverlayAppItem>([
+                new(Key.S, "spotify", null),
+                new(Key.T, "terminal", null)
+            ]);
+        }
+        catch
+        {
+            // Fallback for design-time / test runners without pack URI host
+        }
     }
 
     public void Update(

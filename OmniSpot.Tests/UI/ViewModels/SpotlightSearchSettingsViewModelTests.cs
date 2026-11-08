@@ -42,5 +42,12 @@ public class SpotlightSearchSettingsViewModelTests
         _sut.State.SpotlightModifierKey = Key.LeftCtrl;
         _state.Received(1).SpotlightModifierKey = Key.LeftCtrl;
     }
+
+    [Fact]
+    public void RemoveCustomFolderCommand_RemovesDirectoryFromState()
+    {
+        _sut.RemoveCustomFolderCommand.Execute("C:\\Projects");
+        _state.Received(1).RemoveSpotlightCustomDirectory("C:\\Projects");
+    }
 }
 

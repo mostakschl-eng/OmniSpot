@@ -101,6 +101,12 @@ internal class Hook(
 
             if (e.IsKeyDown())
             {
+                if (_stateMachine.IsModifierHeld && !KeyboardInput.IsKeyPhysicallyDown(_config.Modifier))
+                {
+                    logger.LogDebug("Modifier {Modifier} is no longer physically held - resetting stuck state before processing {Key}", _config.Modifier, e.InputEvent.Key);
+                    ResetModifierState();
+                }
+
                 HandleKeyDown(e);
             }
             else
@@ -116,6 +122,8 @@ internal class Hook(
 
     private void HandleKeyDown(KeyboardHookEventArgs e)
     {
+        ArgumentNullException.ThrowIfNull(_config);
+
         switch (_stateMachine.ProcessKeyDown(e.InputEvent.Key))
         {
             case KeyTransition.ModifierPressed t:
@@ -131,12 +139,30 @@ internal class Hook(
 
                 break;
             case KeyTransition.LetterKeyPressed { Key: var letter }:
+                if (!KeyboardInput.IsKeyPhysicallyDown(_config.Modifier))
+                {
+                    logger.LogWarning("Letter {Letter} received while modifier {Modifier} is not physically held. Resetting state.", letter, _config.Modifier);
+                    ResetModifierState();
+                    break;
+                }
                 HandleLetterPressed(e, letter);
                 break;
             case KeyTransition.DigitKeyPressed { Key: var digit }:
+                if (!KeyboardInput.IsKeyPhysicallyDown(_config.Modifier))
+                {
+                    logger.LogWarning("Digit {Digit} received while modifier {Modifier} is not physically held. Resetting state.", digit, _config.Modifier);
+                    ResetModifierState();
+                    break;
+                }
                 HandleDigitPressed(e, digit);
                 break;
             case KeyTransition.SpotlightShortcutPressed:
+                if (!KeyboardInput.IsKeyPhysicallyDown(_config.SpotlightModifier))
+                {
+                    logger.LogWarning("Spotlight shortcut received but modifier {Modifier} is not physically held. Resetting state.", _config.SpotlightModifier);
+                    ResetModifierState();
+                    break;
+                }
                 e.SuppressKeyPress = true;
                 spotlightService.Toggle();
                 break;

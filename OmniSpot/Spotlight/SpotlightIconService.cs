@@ -37,7 +37,15 @@ internal sealed class SpotlightIconService(IconExtractor iconExtractor)
                 ?? iconExtractor.GetDefaultIcon());
         }
 
-        // 2. Apps: packaged apps (AUMID / shell:AppsFolder) or regular executable paths
+        // 2. Folders
+        if (type == SearchResultType.Folder || Directory.Exists(target))
+        {
+            return _targetCache.GetOrAdd("::folder::", _ =>
+                ExtractShellItemIcon(Environment.GetFolderPath(Environment.SpecialFolder.Windows), 48)
+                ?? iconExtractor.GetDefaultIcon());
+        }
+
+        // 3. Apps: packaged apps (AUMID / shell:AppsFolder) or regular executable paths
         if (type == SearchResultType.App)
         {
             return _targetCache.GetOrAdd(target, ResolveAppIcon);

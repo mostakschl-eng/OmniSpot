@@ -124,6 +124,7 @@ internal class SettingsStateDesignTime : ObservableObject, ISettingsState
     public bool StatsEnabled { get; set; }
     public bool SpotlightEnabled { get; set; } = true;
     public Key SpotlightModifierKey { get; set; } = Key.LeftAlt;
+    public ObservableCollection<string> SpotlightCustomDirectories { get; set; } = ["C:\\Projects", "C:\\Work"];
     public bool HasNoApplications => Applications.Count == 0;
     public ObservableCollection<DynamicApplicationViewModel> DynamicApplications { get; set; }
     public bool HasDynamicApplications => DynamicApplications.Count > 0;
@@ -140,4 +141,6 @@ internal class SettingsStateDesignTime : ObservableObject, ISettingsState
     public void RemoveApplication(ApplicationShortcutViewModel application) { }
     public void MoveApplication(int oldIndex, int newIndex) { }
     public ApplicationShortcutViewModel? PinApplication(DynamicApplicationViewModel dynamic) => null;
+    public void AddSpotlightCustomDirectory(string path) { }
+    public void RemoveSpotlightCustomDirectory(string path) { }
 }

@@ -8,6 +8,6 @@ internal partial class SpotlightSearch : Page
     public SpotlightSearch(SpotlightSearchSettingsViewModel viewModel)
     {
         InitializeComponent();
-        DataContext = viewModel.State;
+        DataContext = viewModel;
     }
 }

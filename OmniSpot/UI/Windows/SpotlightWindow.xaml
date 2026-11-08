@@ -134,7 +134,7 @@
 
     <!-- Shadow clearance — gives DropShadowEffect room to render outside the card bounds -->
     <Border Padding="16">
-        <!-- Floating translucent card container matching AppOverlayWindow -->
+        <!-- Floating translucent card container matching AppOverlayWindow with Windows 11 transparency -->
         <Border x:Name="CardBorder"
                 CornerRadius="12"
                 Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
