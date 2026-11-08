@@ -1,7 +1,7 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using System.IO;
 
 namespace OmniSpot.Spotlight;
 
@@ -46,10 +46,14 @@ internal sealed class RustSearchBackend
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles)
-            }.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps")
+            }.Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+             .Distinct(StringComparer.OrdinalIgnoreCase)
+             .ToArray();
 
-            var configBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new RustIndexConfig(roots, _persistencePath), JsonOptions));
+            var configBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                new RustIndexConfig(roots, _persistencePath), JsonOptions));
             NativeInitialize(configBytes, (UIntPtr)configBytes.Length);
         });
     }
@@ -77,7 +81,8 @@ internal sealed class RustSearchBackend
             return [];
         }
 
-        var requestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new RustIndexSearchRequest(query, maxResults), JsonOptions));
+        var fetchCount = resultType is null ? maxResults : Math.Max(maxResults * 4, 30);
+        var requestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new RustIndexSearchRequest(query, fetchCount), JsonOptions));
         UIntPtr outputLength = UIntPtr.Zero;
         var outputPointer = NativeIndexSearch(requestBytes, (UIntPtr)requestBytes.Length, ref outputLength);
         var managedLength = checked((int)outputLength.ToUInt64());
@@ -95,6 +100,7 @@ internal sealed class RustSearchBackend
             return nativeResults
                 .Where(result => resultType is null ||
                                  string.Equals(result.ResultType, resultType.Value.ToString(), StringComparison.OrdinalIgnoreCase))
+                .Take(maxResults)
                 .Select(result => new SearchResult(
                 result.Title,
                 result.Subtitle,
@@ -134,7 +140,9 @@ internal sealed class RustSearchBackend
     [DllImport(LibraryName, EntryPoint = "omnispot_spotlight_record_launch", CallingConvention = CallingConvention.Cdecl)]
     private static extern uint NativeRecordLaunch(byte[] request, UIntPtr requestLength);
 
-    private sealed record RustIndexConfig(string[] Roots, string PersistencePath);
+    private sealed record RustAppItem(string Title, string Target, string AlternateName, int BaseScore);
+
+    private sealed record RustIndexConfig(string[] Roots, string PersistencePath, RustAppItem[]? ExtraApps = null);
 
     private sealed record RustIndexSearchRequest(string Query, int MaxResults);
 

@@ -104,8 +104,8 @@ internal partial class SpotlightViewModel : ObservableObject
 
         try
         {
-            // Debounce 60ms
-            await Task.Delay(25, ct);
+            // Debounce 40ms to keep typing 120 FPS responsive without stutter
+            await Task.Delay(40, ct);
 
             await _searchService.SearchProgressivelyAsync(value, items =>
             {

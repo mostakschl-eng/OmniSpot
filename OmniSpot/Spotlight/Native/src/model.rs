@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Candidate {
     pub id: u32,
@@ -17,6 +17,17 @@ pub(crate) struct Candidate {
     pub normalized_alternate_name: String,
     #[serde(default)]
     pub character_mask: [u64; 2],
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExtraAppItem {
+    pub title: String,
+    pub target: String,
+    #[serde(default)]
+    pub alternate_name: String,
+    #[serde(default)]
+    pub base_score: i32,
 }
 
 #[derive(Debug, Serialize)]

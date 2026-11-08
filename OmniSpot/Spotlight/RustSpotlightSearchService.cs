@@ -1,16 +1,23 @@
 namespace OmniSpot.Spotlight;
 
 internal sealed class RustSpotlightSearchService(
-    RustSearchBackend backend) : ISpotlightSearchService
+    RustSearchBackend backend,
+    SpotlightIconService iconService) : ISpotlightSearchService
 {
-    public Task<IReadOnlyList<SearchResult>> SearchAsync(
+    public async Task<IReadOnlyList<SearchResult>> SearchAsync(
         string query,
-        CancellationToken cancellationToken = default) =>
-        backend.SearchIndexedAsync(query.Trim(), 25, null, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var results = await backend.SearchIndexedAsync(query.Trim(), 8, null, cancellationToken);
+        return await Task.Run(() => EnrichWithIcons(results), cancellationToken);
+    }
 
-    public Task<IReadOnlyList<SearchResult>> GetSuggestionsAsync(
-        CancellationToken cancellationToken = default) =>
-        backend.SearchIndexedAsync(string.Empty, 10, SearchResultType.App, cancellationToken);
+    public async Task<IReadOnlyList<SearchResult>> GetSuggestionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var results = await backend.SearchIndexedAsync(string.Empty, 8, SearchResultType.App, cancellationToken);
+        return await Task.Run(() => EnrichWithIcons(results), cancellationToken);
+    }
 
     public async Task SearchProgressivelyAsync(
         string query,
@@ -28,5 +35,21 @@ internal sealed class RustSpotlightSearchService(
         {
             _ = backend.RecordLaunchAsync(result.Target);
         }
+    }
+
+    private IReadOnlyList<SearchResult> EnrichWithIcons(IReadOnlyList<SearchResult> results)
+    {
+        if (results.Count == 0)
+        {
+            return results;
+        }
+
+        var list = new List<SearchResult>(results.Count);
+        foreach (var result in results)
+        {
+            var icon = iconService.GetIcon(result.Target, result.Type);
+            list.Add(result with { Icon = icon });
+        }
+        return list;
     }
 }

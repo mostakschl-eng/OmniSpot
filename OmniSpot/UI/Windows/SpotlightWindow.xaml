@@ -51,22 +51,34 @@
             </Style.Triggers>
         </Style>
         <DataTemplate x:Key="SearchResultTemplate">
-            <Grid Height="42" Margin="9,1" Cursor="Hand" ToolTip="{Binding Subtitle}"
+            <Grid Height="46" Margin="8,1" Cursor="Hand" ToolTip="{Binding Subtitle}"
                   MouseLeftButtonUp="OnItemClicked">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="36" />
+                    <ColumnDefinition Width="40" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Image Source="{Binding Icon}" Width="24" Height="24"
-                       VerticalAlignment="Center" HorizontalAlignment="Center"
-                       RenderOptions.BitmapScalingMode="HighQuality" />
-                <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
-                           VerticalAlignment="Center" Margin="8,0,8,0" TextTrimming="CharacterEllipsis"
-                           Foreground="{StaticResource SpotlightText}" />
-                <TextBlock Grid.Column="2" Text="{Binding Type}" FontSize="10" Opacity="0.62"
-                           VerticalAlignment="Center" Margin="8,0,6,0"
-                           Foreground="{StaticResource SpotlightText}" />
+                <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7"
+                        Background="#12FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Image Source="{Binding Icon}" Width="22" Height="22"
+                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,8,0">
+                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{StaticResource SpotlightText}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="10.5" Opacity="0.55"
+                               TextTrimming="CharacterEllipsis" Margin="0,1,0,0"
+                               Foreground="{StaticResource SpotlightText}" />
+                </StackPanel>
+                <Border Grid.Column="2" VerticalAlignment="Center" Margin="8,0,8,0"
+                        Padding="7,2" CornerRadius="4" Background="#14FFFFFF"
+                        BorderBrush="#10FFFFFF" BorderThickness="1">
+                    <TextBlock Text="{Binding Type}" FontSize="9.5" Opacity="0.75" FontWeight="Medium"
+                               Foreground="{StaticResource SpotlightText}" />
+                </Border>
             </Grid>
         </DataTemplate>
     </ui:FluentWindow.Resources>

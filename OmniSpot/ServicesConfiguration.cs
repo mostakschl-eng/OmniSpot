@@ -103,6 +103,7 @@ internal static class ServicesConfiguration
         services.AddSingleton<AppOverlayViewModel>();
 
         // spotlight
+        services.AddSingleton<SpotlightIconService>();
         services.AddSingleton<RustSearchBackend>();
         services.AddTransient<ISpotlightSearchService, RustSpotlightSearchService>();
         services.AddSingleton<SpotlightService>();

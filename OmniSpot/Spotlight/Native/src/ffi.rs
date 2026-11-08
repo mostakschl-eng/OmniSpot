@@ -1,4 +1,4 @@
-use crate::model::Candidate;
+use crate::model::{Candidate, ExtraAppItem};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -21,6 +21,8 @@ struct Request {
 struct IndexConfig {
     roots: Vec<String>,
     persistence_path: String,
+    #[serde(default)]
+    extra_apps: Option<Vec<ExtraAppItem>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,8 +71,9 @@ pub extern "C" fn omnispot_spotlight_initialize(
         Ok(index) => index,
         Err(_) => return 0,
     };
+    let extra_apps = config.extra_apps.unwrap_or_default();
     let roots = config.roots.into_iter().map(PathBuf::from).collect::<Vec<_>>();
-    index.refresh_roots(&roots, std::path::Path::new(&config.persistence_path));
+    index.refresh_roots(&roots, &extra_apps, std::path::Path::new(&config.persistence_path));
     drop(index);
 
     let watchers = WATCHERS.get_or_init(|| Mutex::new(Vec::new()));

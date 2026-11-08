@@ -90,6 +90,12 @@
     <None Update="nlog.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="Spotlight\Native\target\release\omnispot_spotlight_native.dll">
+      <Link>omnispot_spotlight_native.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <Visible>false</Visible>
+    </None>
   </ItemGroup>
 
   <ProjectExtensions><VisualStudio><UserProperties config_1schema_1json__JsonSchema="https://json-schema.org/draft-07/schema" /></VisualStudio></ProjectExtensions>

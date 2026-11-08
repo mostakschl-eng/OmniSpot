@@ -54,6 +54,7 @@ internal sealed class KeyStateMachine
 
         if (_spotlightEnabled && key == Key.Space && IsSpotlightModifierHeld())
         {
+            _state = State.ModifierHeldWithActionKey;
             return new KeyTransition.SpotlightShortcutPressed();
         }
 

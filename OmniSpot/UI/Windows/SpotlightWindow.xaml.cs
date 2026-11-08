@@ -18,16 +18,17 @@ internal partial class SpotlightWindow : FluentWindow
 {
     private readonly SpotlightViewModel _viewModel;
     private readonly DispatcherTimer _foregroundTimer;
+    private long _showTimestamp;
 
     public SpotlightWindow(SpotlightViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
-        _foregroundTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(100), DispatcherPriority.Background, OnForegroundTimerTick, Dispatcher);
+        _foregroundTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, OnForegroundTimerTick, Dispatcher);
 
         _viewModel.RequestClose += Hide;
-        Deactivated += (_, _) => Hide();
+        Deactivated += OnWindowDeactivated;
         Loaded += OnLoaded;
         IsVisibleChanged += OnIsVisibleChanged;
         Closed += OnClosed;
@@ -35,9 +36,18 @@ internal partial class SpotlightWindow : FluentWindow
 
     }
 
+    private void OnWindowDeactivated(object? sender, EventArgs e)
+    {
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(_showTimestamp).TotalMilliseconds < 350)
+        {
+            return;
+        }
+        Hide();
+    }
+
     public void FocusSearchBox()
     {
-        Dispatcher.BeginInvoke(() => FocusSearchBoxCore(), DispatcherPriority.ApplicationIdle);
+        Dispatcher.BeginInvoke(() => FocusSearchBoxCore(), DispatcherPriority.Input);
     }
 
     private void FocusSearchBoxCore()
@@ -61,8 +71,9 @@ internal partial class SpotlightWindow : FluentWindow
     {
         if (IsVisible)
         {
+            _showTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             _foregroundTimer.Start();
-            Dispatcher.BeginInvoke(() => FocusSearchBoxCore(), DispatcherPriority.ApplicationIdle);
+            Dispatcher.BeginInvoke(() => FocusSearchBoxCore(), DispatcherPriority.Input);
         }
         else
         {
@@ -72,7 +83,7 @@ internal partial class SpotlightWindow : FluentWindow
 
     private void OnForegroundTimerTick(object? sender, EventArgs e)
     {
-        if (!IsVisible)
+        if (!IsVisible || System.Diagnostics.Stopwatch.GetElapsedTime(_showTimestamp).TotalMilliseconds < 350)
         {
             return;
         }
