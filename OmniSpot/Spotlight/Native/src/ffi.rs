@@ -1,12 +1,49 @@
 use crate::model::{Candidate, ExtraAppItem};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::slice;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock, RwLock};
 
-static INDEX: OnceLock<Mutex<crate::index::SearchIndex>> = OnceLock::new();
+static INDEX: OnceLock<RwLock<crate::index::SearchIndex>> = OnceLock::new();
 static WATCHERS: OnceLock<Mutex<Vec<RecommendedWatcher>>> = OnceLock::new();
+static DIRTY_FLAG: AtomicBool = AtomicBool::new(false);
+static WORKER_INIT: std::sync::Once = std::sync::Once::new();
+
+fn start_background_worker() {
+    WORKER_INIT.call_once(|| {
+        std::thread::spawn(|| {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if DIRTY_FLAG.swap(false, Ordering::Relaxed) {
+                    // Settle period: wait 4 seconds for file activity to finish (debounce)
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    DIRTY_FLAG.store(false, Ordering::Relaxed);
+
+                    if let Some(index_rw) = INDEX.get() {
+                        let (roots, extra_apps, persistence) = match index_rw.read() {
+                            Ok(guard) => (guard.roots.clone(), guard.extra_apps.clone(), guard.persistence_path.clone()),
+                            Err(_) => continue,
+                        };
+                        if let Some(persistence_path) = persistence {
+                            let mut new_index = crate::index::SearchIndex::scan_all(&roots, &extra_apps, &persistence_path);
+                            if let Ok(mut guard) = index_rw.write() {
+                                guard.swap_entries(&mut new_index);
+                                guard.save(&persistence_path);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+}
+
+fn is_watchable_root(path: &Path) -> bool {
+    let s = path.to_string_lossy().to_ascii_lowercase();
+    s.contains("start menu") || s.contains("desktop") || s.ends_with("windowsapps")
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,10 +101,10 @@ pub extern "C" fn omnispot_spotlight_initialize(
         Ok(config) => config,
         Err(_) => return 0,
     };
-    let index = INDEX.get_or_init(|| Mutex::new(crate::index::SearchIndex::load(
+    let index = INDEX.get_or_init(|| RwLock::new(crate::index::SearchIndex::load(
         std::path::Path::new(&config.persistence_path),
     )));
-    let mut index = match index.lock() {
+    let mut index = match index.write() {
         Ok(index) => index,
         Err(_) => return 0,
     };
@@ -82,12 +119,12 @@ pub extern "C" fn omnispot_spotlight_initialize(
         Err(_) => return 0,
     };
     for root in roots {
+        if !is_watchable_root(&root) {
+            continue;
+        }
         let watcher_result = notify::recommended_watcher(|event: notify::Result<notify::Event>| {
             if event.is_ok() {
-                if let Some(index) = INDEX.get().and_then(|index| index.lock().ok()) {
-                    let mut index = index;
-                    index.mark_dirty();
-                }
+                DIRTY_FLAG.store(true, Ordering::Relaxed);
             }
         });
         let mut watcher = match watcher_result {
@@ -98,6 +135,7 @@ pub extern "C" fn omnispot_spotlight_initialize(
             watchers.push(watcher);
         }
     }
+    start_background_worker();
     1
 }
 
@@ -115,13 +153,13 @@ pub extern "C" fn omnispot_spotlight_search_index(
         Ok(request) => request,
         Err(_) => return std::ptr::null_mut(),
     };
-    let index = match INDEX.get().and_then(|index| index.lock().ok()) {
+    let index_guard = match INDEX.get().and_then(|index| index.read().ok()) {
         Some(index) => index,
         None => return std::ptr::null_mut(),
     };
-    let mut index = index;
-    index.refresh_if_dirty();
-    write_json_response(&index.search(&request.query, request.max_results), output_len)
+    let results = index_guard.search(&request.query, request.max_results);
+    drop(index_guard);
+    write_json_response(&results, output_len)
 }
 
 #[no_mangle]
@@ -137,7 +175,7 @@ pub extern "C" fn omnispot_spotlight_record_launch(
         Ok(request) => request,
         Err(_) => return 0,
     };
-    let index = match INDEX.get().and_then(|index| index.lock().ok()) {
+    let index = match INDEX.get().and_then(|index| index.write().ok()) {
         Some(index) => index,
         None => return 0,
     };

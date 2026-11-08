@@ -1,20 +1,22 @@
+using OmniSpot.Spotlight;
+using OmniSpot.UI.ViewModels;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Threading;
-using System.Runtime.InteropServices;
-using OmniSpot.Spotlight;
-using OmniSpot.UI.ViewModels;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.Input.KeyboardAndMouse;
-using Wpf.Ui.Controls;
+using Wpf.Ui.Appearance;
 using Forms = System.Windows.Forms;
 
 namespace OmniSpot.UI.Windows;
 
-internal partial class SpotlightWindow : FluentWindow
+internal partial class SpotlightWindow : Window
 {
     private readonly SpotlightViewModel _viewModel;
     private readonly DispatcherTimer _foregroundTimer;
@@ -34,6 +36,7 @@ internal partial class SpotlightWindow : FluentWindow
         Closed += OnClosed;
         PreviewKeyDown += OnPreviewKeyDown;
 
+        ApplicationThemeManager.Changed += OnThemeChanged;
     }
 
     private void OnWindowDeactivated(object? sender, EventArgs e)
@@ -71,6 +74,8 @@ internal partial class SpotlightWindow : FluentWindow
     {
         if (IsVisible)
         {
+            ApplyShadowForTheme();
+            PositionWindow();
             _showTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             _foregroundTimer.Start();
             Dispatcher.BeginInvoke(() => FocusSearchBoxCore(), DispatcherPriority.Input);
@@ -97,12 +102,25 @@ internal partial class SpotlightWindow : FluentWindow
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyShadowForTheme();
         PositionWindow();
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
         _foregroundTimer.Stop();
+        ApplicationThemeManager.Changed -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged(ApplicationTheme theme, System.Windows.Media.Color _) => ApplyShadowForTheme();
+
+    private void ApplyShadowForTheme()
+    {
+        var isDark = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Dark;
+
+        CardBorder.Effect = isDark
+            ? new DropShadowEffect { BlurRadius = 24, ShadowDepth = 0, Opacity = 0.22, Color = Colors.White }
+            : new DropShadowEffect { BlurRadius = 24, ShadowDepth = 8, Direction = 270, Opacity = 0.35, Color = Colors.Black };
     }
 
     private void PositionWindow()
@@ -149,6 +167,14 @@ internal partial class SpotlightWindow : FluentWindow
         {
             _viewModel.OpenItemCommand.Execute(item);
             e.Handled = true;
+        }
+    }
+
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListBox listBox && listBox.SelectedItem is not null)
+        {
+            listBox.ScrollIntoView(listBox.SelectedItem);
         }
     }
 }

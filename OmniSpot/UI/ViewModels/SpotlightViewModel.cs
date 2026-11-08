@@ -69,7 +69,11 @@ internal partial class SpotlightViewModel : ObservableObject
         try
         {
             var suggestions = await _searchService.GetSuggestionsAsync();
-            Suggestions = new ObservableCollection<SearchResult>(suggestions);
+            Suggestions.Clear();
+            foreach (var item in suggestions)
+            {
+                Suggestions.Add(item);
+            }
             if (ShowSuggestions)
             {
                 SelectedIndex = Suggestions.Count > 0 ? 0 : -1;
@@ -92,7 +96,7 @@ internal partial class SpotlightViewModel : ObservableObject
             Results.Clear();
             ShowSuggestions = true;
             HasResults = false;
-            SelectedIndex = -1;
+            SelectedIndex = Suggestions.Count > 0 ? 0 : -1;
             IsSearching = false;
             ShowNoResults = false;
             return;
@@ -104,8 +108,8 @@ internal partial class SpotlightViewModel : ObservableObject
 
         try
         {
-            // Debounce 40ms to keep typing 120 FPS responsive without stutter
-            await Task.Delay(40, ct);
+            // Responsive debounce: 30ms gives instant typing response without flooding
+            await Task.Delay(30, ct);
 
             await _searchService.SearchProgressivelyAsync(value, items =>
             {
@@ -114,10 +118,14 @@ internal partial class SpotlightViewModel : ObservableObject
                     return;
                 }
 
-                Results = new ObservableCollection<SearchResult>(items);
+                Results.Clear();
+                foreach (var item in items)
+                {
+                    Results.Add(item);
+                }
                 HasResults = Results.Count > 0;
                 ShowNoResults = false;
-                SelectedIndex = HasResults ? Math.Clamp(SelectedIndex, 0, Results.Count - 1) : -1;
+                SelectedIndex = HasResults ? 0 : -1;
             }, ct);
         }
         catch (OperationCanceledException)

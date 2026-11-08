@@ -1,170 +1,280 @@
-<ui:FluentWindow x:Class="OmniSpot.UI.Windows.SpotlightWindow"
-                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-                 xmlns:viewModels="clr-namespace:OmniSpot.UI.ViewModels"
-                 mc:Ignorable="d"
-                 WindowStyle="None"
-                 ResizeMode="NoResize"
-                 WindowBackdropType="None"
-                 WindowCornerPreference="Round"
-                 Background="#FF191D24"
-                 Topmost="True"
-                 ShowInTaskbar="False"
-                 ShowActivated="True"
-                 WindowStartupLocation="Manual"
-                 SizeToContent="Manual"
-                 Height="380"
-                 Width="540"
-                 x:ClassModifier="internal"
-                 d:DataContext="{d:DesignInstance viewModels:SpotlightViewModel}">
-    <ui:FluentWindow.Resources>
+<Window x:Class="OmniSpot.UI.Windows.SpotlightWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:viewModels="clr-namespace:OmniSpot.UI.ViewModels"
+        mc:Ignorable="d"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        WindowStartupLocation="Manual"
+        SizeToContent="Manual"
+        Height="470"
+        Width="580"
+        ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
+        ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+        x:ClassModifier="internal"
+        d:DataContext="{d:DesignInstance viewModels:SpotlightViewModel}">
+
+    <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
-        <SolidColorBrush x:Key="SpotlightText" Color="#F4F7FB" />
+
         <Style x:Key="LauncherItemStyle" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="2" />
+            <Setter Property="Margin" Value="0,1" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="9">
-                            <ContentPresenter />
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="4,2">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="3" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!-- Left accent indicator pill when selected -->
+                                <Border x:Name="AccentPill"
+                                        Grid.Column="0"
+                                        Width="3"
+                                        Height="18"
+                                        CornerRadius="1.5"
+                                        Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Left"
+                                        Visibility="Collapsed" />
+                                <ContentPresenter Grid.Column="1" />
+                            </Grid>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="AccentPill" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="{DynamicResource SystemAccentColor}" Opacity="0.08" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True" />
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="ItemBorder" Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="{DynamicResource SystemAccentColor}" Opacity="0.20" />
+                                    </Setter.Value>
+                                </Setter>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background">
-                        <Setter.Value>
-                            <SolidColorBrush Color="{DynamicResource SystemAccentColor}" Opacity="0.22" />
-                        </Setter.Value>
-                    </Setter>
-                </Trigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#364B5B70" />
-                </Trigger>
-            </Style.Triggers>
         </Style>
+
         <DataTemplate x:Key="SearchResultTemplate">
-            <Grid Height="46" Margin="8,1" Cursor="Hand" ToolTip="{Binding Subtitle}"
+            <Grid Height="44" Margin="6,0" Cursor="Hand" ToolTip="{Binding Subtitle}"
                   MouseLeftButtonUp="OnItemClicked">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="36" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7"
-                        Background="#12FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"
+
+                <!-- Icon container styled consistently with AppOverlay and Settings -->
+                <Border Grid.Column="0" Width="30" Height="30" CornerRadius="6"
+                        Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
                         VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <Image Source="{Binding Icon}" Width="22" Height="22"
+                    <Image Source="{Binding Icon}" Width="20" Height="20"
                            VerticalAlignment="Center" HorizontalAlignment="Center"
                            RenderOptions.BitmapScalingMode="HighQuality" />
                 </Border>
+
+                <!-- Titles -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,8,0">
-                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis"
-                               Foreground="{StaticResource SpotlightText}" />
-                    <TextBlock Text="{Binding Subtitle}" FontSize="10.5" Opacity="0.55"
-                               TextTrimming="CharacterEllipsis" Margin="0,1,0,0"
-                               Foreground="{StaticResource SpotlightText}" />
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="11"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
                 </StackPanel>
-                <Border Grid.Column="2" VerticalAlignment="Center" Margin="8,0,8,0"
-                        Padding="7,2" CornerRadius="4" Background="#14FFFFFF"
-                        BorderBrush="#10FFFFFF" BorderThickness="1">
-                    <TextBlock Text="{Binding Type}" FontSize="9.5" Opacity="0.75" FontWeight="Medium"
-                               Foreground="{StaticResource SpotlightText}" />
+
+                <!-- Type badge matching AppOverlay button badges -->
+                <Border Grid.Column="2" VerticalAlignment="Center" Margin="8,0,4,0"
+                        Padding="8,2" CornerRadius="4"
+                        Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <TextBlock Text="{Binding Type}" FontSize="10" FontWeight="Medium"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 </Border>
             </Grid>
         </DataTemplate>
-    </ui:FluentWindow.Resources>
+    </Window.Resources>
 
-    <Border x:Name="CardBorder" CornerRadius="12" Background="#FF191D24" BorderThickness="1"
-            BorderBrush="#405A6574">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+    <!-- Shadow clearance — gives DropShadowEffect room to render outside the card bounds -->
+    <Border Padding="16">
+        <!-- Floating translucent card container matching AppOverlayWindow -->
+        <Border x:Name="CardBorder"
+                CornerRadius="12"
+                Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                Opacity="0.96">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="14,12,14,11">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ui:TextBox x:Name="SearchBox"
-                            Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
-                            PlaceholderText="Search apps and files"
-                            Icon="{ui:SymbolIcon Search24}"
-                            Height="44" FontSize="16"
-                            Background="#FF242A33" Foreground="{StaticResource SpotlightText}"
-                            ClearButtonEnabled="True"
-                            VerticalContentAlignment="Center" />
-                <Border Grid.Column="1" Margin="12,0,0,0" Padding="8,4"
-                        VerticalAlignment="Center" CornerRadius="5"
-                        BorderBrush="#45D8E4F2" BorderThickness="1">
-                    <TextBlock Text="ESC" FontSize="10" Opacity="0.7"
-                               Foreground="{StaticResource SpotlightText}" />
-                </Border>
-            </Grid>
-
-            <Border Grid.Row="1" Height="1" Background="#35D8E4F2" />
-
-            <Grid Grid.Row="2" Margin="12,10,12,8">
-                <StackPanel Visibility="{Binding ShowSuggestions, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="QUICK ACCESS" FontSize="10" FontWeight="SemiBold"
-                               Margin="9,0,0,8" Opacity="0.7"
-                               Foreground="{StaticResource SpotlightText}" />
-                    <ListBox ItemsSource="{Binding Suggestions}"
-                             SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
-                             ItemTemplate="{StaticResource SearchResultTemplate}"
-                             ItemContainerStyle="{StaticResource LauncherItemStyle}"
-                             Background="Transparent" BorderThickness="0"
-                             MaxHeight="235"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
-                </StackPanel>
-
-                <StackPanel Visibility="{Binding HasResults, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="SEARCH RESULTS" FontSize="10" FontWeight="SemiBold"
-                               Margin="9,0,0,7" Opacity="0.7"
-                               Foreground="{StaticResource SpotlightText}" />
-                    <ListBox ItemsSource="{Binding Results}"
-                             SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
-                             ItemTemplate="{StaticResource SearchResultTemplate}"
-                             ItemContainerStyle="{StaticResource LauncherItemStyle}"
-                             Background="Transparent" BorderThickness="0"
-                             MaxHeight="235" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
-                </StackPanel>
-
-                <TextBlock Text="No matching apps or indexed files"
-                           Visibility="{Binding ShowNoResults, Converter={StaticResource BoolToVis}}"
-                           HorizontalAlignment="Center" Margin="0,22"
-                           FontSize="13" Opacity="0.7"
-                           Foreground="{StaticResource SpotlightText}" />
-            </Grid>
-
-            <Border Grid.Row="3" BorderBrush="#45D8E4F2"
-                    BorderThickness="0,1,0,0" Padding="20,10">
-                <Grid>
+                <!-- Search Input Row -->
+                <Grid Grid.Row="0" Margin="14,12,14,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding SelectedPath}" FontSize="11" Opacity="0.72"
-                               TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedPath}"
-                               Foreground="{StaticResource SpotlightText}"
-                               VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="↑↓  Select     Enter  Open" Margin="18,0,0,0"
-                               FontSize="11" Opacity="0.64"
-                               Foreground="{StaticResource SpotlightText}" />
+
+                    <ui:TextBox x:Name="SearchBox"
+                                Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Search apps and files..."
+                                Icon="{ui:SymbolIcon Search24}"
+                                Height="42"
+                                FontSize="15"
+                                ClearButtonEnabled="True"
+                                VerticalContentAlignment="Center" />
+
+                    <!-- ESC badge matching AppOverlayWindow's hotkey button styling -->
+                    <ui:Button Grid.Column="1"
+                               Content="ESC"
+                               Appearance="Secondary"
+                               Margin="10,0,0,0"
+                               Height="28"
+                               Padding="8,2"
+                               MinWidth="0"
+                               IsHitTestVisible="False"
+                               Focusable="False"
+                               VerticalAlignment="Center"
+                               FontSize="10.5" />
                 </Grid>
-            </Border>
-        </Grid>
+
+                <!-- Divider -->
+                <Border Grid.Row="1" Height="1" Background="{DynamicResource DividerStrokeColorDefaultBrush}" Margin="14,0" />
+
+                <!-- Results & Suggestions Area -->
+                <Grid Grid.Row="2" Margin="14,8,14,8">
+                    <!-- Quick Access (Suggestions) -->
+                    <Grid Visibility="{Binding ShowSuggestions, Converter={StaticResource BoolToVis}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="QUICK ACCESS"
+                                   FontSize="10.5"
+                                   FontWeight="SemiBold"
+                                   Margin="6,4,0,6"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <ListBox Grid.Row="1"
+                                 ItemsSource="{Binding Suggestions}"
+                                 SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                                 ItemTemplate="{StaticResource SearchResultTemplate}"
+                                 ItemContainerStyle="{StaticResource LauncherItemStyle}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 MaxHeight="310"
+                                 SelectionChanged="OnSelectionChanged"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                    </Grid>
+
+                    <!-- Search Results -->
+                    <Grid Visibility="{Binding HasResults, Converter={StaticResource BoolToVis}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="SEARCH RESULTS"
+                                   FontSize="10.5"
+                                   FontWeight="SemiBold"
+                                   Margin="6,4,0,6"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <ListBox Grid.Row="1"
+                                 ItemsSource="{Binding Results}"
+                                 SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                                 ItemTemplate="{StaticResource SearchResultTemplate}"
+                                 ItemContainerStyle="{StaticResource LauncherItemStyle}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 MaxHeight="310"
+                                 SelectionChanged="OnSelectionChanged"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                    </Grid>
+
+                    <!-- No Results placeholder -->
+                    <StackPanel Visibility="{Binding ShowNoResults, Converter={StaticResource BoolToVis}}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Margin="0,35">
+                        <ui:SymbolIcon Symbol="SearchInfo24"
+                                       FontSize="28"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,8" />
+                        <TextBlock Text="No matching apps or files"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Footer Status Bar -->
+                <Border Grid.Row="3"
+                        BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="0,1,0,0"
+                        Padding="16,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding SelectedPath}"
+                                   FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding SelectedPath}"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="↑↓ Navigate   ↵ Open   Esc Close"
+                                   Margin="16,0,0,0"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
     </Border>
-</ui:FluentWindow>
+</Window>

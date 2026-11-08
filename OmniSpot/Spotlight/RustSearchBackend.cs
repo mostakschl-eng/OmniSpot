@@ -44,7 +44,6 @@ internal sealed class RustSearchBackend
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
                 Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps")
@@ -62,9 +61,12 @@ internal sealed class RustSearchBackend
     {
         WarmUp();
         await _indexInitialization.Value.WaitAsync(cancellationToken);
-        var requestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
-            new RustRecordLaunchRequest(target, _persistencePath), JsonOptions));
-        NativeRecordLaunch(requestBytes, (UIntPtr)requestBytes.Length);
+        await Task.Run(() =>
+        {
+            var requestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                new RustRecordLaunchRequest(target, _persistencePath), JsonOptions));
+            NativeRecordLaunch(requestBytes, (UIntPtr)requestBytes.Length);
+        }, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SearchResult>> SearchIndexedAsync(
@@ -81,40 +83,44 @@ internal sealed class RustSearchBackend
             return [];
         }
 
-        var fetchCount = resultType is null ? maxResults : Math.Max(maxResults * 4, 30);
-        var requestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new RustIndexSearchRequest(query, fetchCount), JsonOptions));
-        UIntPtr outputLength = UIntPtr.Zero;
-        var outputPointer = NativeIndexSearch(requestBytes, (UIntPtr)requestBytes.Length, ref outputLength);
-        var managedLength = checked((int)outputLength.ToUInt64());
-        if (outputPointer == IntPtr.Zero || managedLength <= 0)
-        {
-            return [];
-        }
-
-        try
+        return await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var outputBytes = new byte[managedLength];
-            Marshal.Copy(outputPointer, outputBytes, 0, managedLength);
-            var nativeResults = JsonSerializer.Deserialize<RustIndexedResult[]>(outputBytes, JsonOptions) ?? [];
-            return nativeResults
-                .Where(result => resultType is null ||
-                                 string.Equals(result.ResultType, resultType.Value.ToString(), StringComparison.OrdinalIgnoreCase))
-                .Take(maxResults)
-                .Select(result => new SearchResult(
-                result.Title,
-                result.Subtitle,
-                result.Target,
-                Enum.TryParse<SearchResultType>(result.ResultType, true, out var parsedType)
-                    ? parsedType
-                    : SearchResultType.File,
-                null,
-                result.Score)).ToList();
-        }
-        finally
-        {
-            NativeFree(outputPointer, outputLength);
-        }
+            var fetchCount = resultType is null ? maxResults : Math.Max(maxResults * 4, 30);
+            var requestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new RustIndexSearchRequest(query, fetchCount), JsonOptions));
+            UIntPtr outputLength = UIntPtr.Zero;
+            var outputPointer = NativeIndexSearch(requestBytes, (UIntPtr)requestBytes.Length, ref outputLength);
+            var managedLength = checked((int)outputLength.ToUInt64());
+            if (outputPointer == IntPtr.Zero || managedLength <= 0)
+            {
+                return [];
+            }
+
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var outputBytes = new byte[managedLength];
+                Marshal.Copy(outputPointer, outputBytes, 0, managedLength);
+                var nativeResults = JsonSerializer.Deserialize<RustIndexedResult[]>(outputBytes, JsonOptions) ?? [];
+                return nativeResults
+                    .Where(result => resultType is null ||
+                                     string.Equals(result.ResultType, resultType.Value.ToString(), StringComparison.OrdinalIgnoreCase))
+                    .Take(maxResults)
+                    .Select(result => new SearchResult(
+                    result.Title,
+                    result.Subtitle,
+                    result.Target,
+                    Enum.TryParse<SearchResultType>(result.ResultType, true, out var parsedType)
+                        ? parsedType
+                        : SearchResultType.File,
+                    null,
+                    result.Score)).ToList();
+            }
+            finally
+            {
+                NativeFree(outputPointer, outputLength);
+            }
+        }, cancellationToken);
     }
 
     private static bool IsNativeAvailable()

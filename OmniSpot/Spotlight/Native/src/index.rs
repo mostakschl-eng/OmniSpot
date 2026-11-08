@@ -37,13 +37,13 @@ pub(crate) struct SearchIndex {
     #[serde(skip)]
     dirty: bool,
     #[serde(skip)]
-    roots: Vec<PathBuf>,
+    pub(crate) roots: Vec<PathBuf>,
     #[serde(skip)]
-    persistence_path: Option<PathBuf>,
+    pub(crate) persistence_path: Option<PathBuf>,
     #[serde(skip)]
-    query_cache: Option<(String, Vec<u32>)>,
+    pub(crate) query_cache: std::sync::Mutex<Option<(String, Vec<u32>)>>,
     #[serde(skip)]
-    extra_apps: Vec<ExtraAppItem>,
+    pub(crate) extra_apps: Vec<ExtraAppItem>,
 }
 
 struct ScoredCandidate {
@@ -72,6 +72,84 @@ impl SearchIndex {
             }
         }
     }
+
+
+
+    pub(crate) fn scan_all(
+        roots: &[PathBuf],
+        extra_apps: &[ExtraAppItem],
+        persistence_path: &Path,
+    ) -> Self {
+        let mut entries = seed_windows_tools();
+        let mut seen = HashSet::new();
+        for entry in &entries {
+            seen.insert(entry.target.to_ascii_lowercase());
+        }
+
+        for app in enumerate_shell_apps() {
+            let target_key = app.target.to_ascii_lowercase();
+            if seen.insert(target_key) {
+                entries.push(app);
+            }
+        }
+
+        for app in extra_apps {
+            let target_key = app.target.to_ascii_lowercase();
+            if seen.insert(target_key) {
+                let base = if app.base_score > 0 { app.base_score } else { 550 };
+                entries.push(create_entry(&app.title, &app.target, &app.alternate_name, "App", base));
+            }
+        }
+
+        for root in roots {
+            if !root.is_dir() {
+                continue;
+            }
+            let root_str = root.to_string_lossy().to_ascii_lowercase();
+            if root_str.contains("start menu") || root_str.contains("programs") || root_str.ends_with("windowsapps") {
+                scan_app_directory(root, 0, 3, &mut entries, &mut seen);
+            } else if root_str.contains("program files") {
+                scan_app_directory(root, 0, 2, &mut entries, &mut seen);
+            } else if is_user_profile_root(root) {
+                let docs = root.join("Documents");
+                if docs.is_dir() {
+                    scan_file_directory(&docs, 0, 3, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                }
+                let downloads = root.join("Downloads");
+                if downloads.is_dir() {
+                    scan_file_directory(&downloads, 0, 2, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                }
+            } else {
+                scan_app_directory(root, 0, 3, &mut entries, &mut seen);
+                scan_file_directory(root, 0, 3, &mut entries, &mut seen, MAX_INDEXED_FILES);
+            }
+            if entries.len() >= MAX_INDEXED_FILES {
+                break;
+            }
+        }
+
+        SearchIndex {
+            version: CURRENT_INDEX_VERSION,
+            entries,
+            last_refresh: Some(SystemTime::now()),
+            dirty: false,
+            roots: roots.to_vec(),
+            persistence_path: Some(persistence_path.to_path_buf()),
+            query_cache: std::sync::Mutex::new(None),
+            extra_apps: extra_apps.to_vec(),
+        }
+    }
+
+    pub(crate) fn swap_entries(&mut self, other: &mut Self) {
+        std::mem::swap(&mut self.entries, &mut other.entries);
+        self.last_refresh = Some(SystemTime::now());
+        self.dirty = false;
+        if let Ok(mut guard) = self.query_cache.lock() {
+            *guard = None;
+        }
+    }
+
+
 
     pub(crate) fn refresh_roots(
         &mut self,
@@ -137,61 +215,16 @@ impl SearchIndex {
             return;
         }
 
-        let mut entries = seed_windows_tools();
-        let mut seen = HashSet::new();
-        for entry in &entries {
-            seen.insert(entry.target.to_ascii_lowercase());
-        }
-
-        for app in enumerate_shell_apps() {
-            let target_key = app.target.to_ascii_lowercase();
-            if seen.insert(target_key) {
-                entries.push(app);
-            }
-        }
-
-        for app in extra_apps {
-            let target_key = app.target.to_ascii_lowercase();
-            if seen.insert(target_key) {
-                let base = if app.base_score > 0 { app.base_score } else { 550 };
-                entries.push(create_entry(&app.title, &app.target, &app.alternate_name, "App", base));
-            }
-        }
-
-        for root in roots {
-            if !root.is_dir() {
-                continue;
-            }
-            let root_str = root.to_string_lossy().to_ascii_lowercase();
-            if root_str.contains("start menu") || root_str.contains("programs") || root_str.ends_with("windowsapps") {
-                scan_app_directory(root, 0, 3, &mut entries, &mut seen);
-            } else if root_str.contains("program files") {
-                scan_app_directory(root, 0, 2, &mut entries, &mut seen);
-            } else if is_user_profile_root(root) {
-                let docs = root.join("Documents");
-                if docs.is_dir() {
-                    scan_file_directory(&docs, 0, 3, &mut entries, &mut seen, MAX_INDEXED_FILES);
-                }
-                let downloads = root.join("Downloads");
-                if downloads.is_dir() {
-                    scan_file_directory(&downloads, 0, 2, &mut entries, &mut seen, MAX_INDEXED_FILES);
-                }
-            } else {
-                scan_app_directory(root, 0, 3, &mut entries, &mut seen);
-                scan_file_directory(root, 0, 3, &mut entries, &mut seen, MAX_INDEXED_FILES);
-            }
-            if entries.len() >= MAX_INDEXED_FILES {
-                break;
-            }
-        }
-
-        self.entries = entries;
+        let scanned = Self::scan_all(roots, extra_apps, persistence_path);
+        self.entries = scanned.entries;
         self.roots = roots.to_vec();
         self.extra_apps = extra_apps.to_vec();
         self.persistence_path = Some(persistence_path.to_path_buf());
         self.dirty = false;
         self.last_refresh = Some(SystemTime::now());
-        self.query_cache = None;
+        if let Ok(mut guard) = self.query_cache.lock() {
+            *guard = None;
+        }
         self.save(persistence_path);
     }
 
@@ -213,7 +246,7 @@ impl SearchIndex {
             .collect()
     }
 
-    pub(crate) fn search(&mut self, query: &str, max_results: usize) -> Vec<IndexedResult> {
+    pub(crate) fn search(&self, query: &str, max_results: usize) -> Vec<IndexedResult> {
         let trimmed = query.trim();
         if trimmed.is_empty() {
             let mut seen = HashSet::new();
@@ -245,17 +278,20 @@ impl SearchIndex {
         let query_mask = compute_mask(&norm_query);
 
         // Wox prefix query cache: if query grows (e.g. c -> ch -> chr), reuse matched subset
-        let can_reuse_cache = self
-            .query_cache
-            .as_ref()
-            .is_some_and(|(prev, _)| norm_query.starts_with(prev));
+        let cached_subset = self.query_cache.lock().ok().and_then(|guard| {
+            if let Some((prev, ids)) = guard.as_ref() {
+                if norm_query.starts_with(prev) {
+                    return Some(ids.clone());
+                }
+            }
+            None
+        });
 
         let mut matched_indices = Vec::new();
         let mut scored_matches = Vec::new();
 
-        if can_reuse_cache {
-            let cached_ids = &self.query_cache.as_ref().unwrap().1;
-            for &idx in cached_ids {
+        if let Some(cached_ids) = cached_subset {
+            for idx in cached_ids {
                 let idx_usize = idx as usize;
                 if let Some(entry) = self.entries.get(idx_usize) {
                     if let Some(fuzzy_score) = score_query(
@@ -288,7 +324,9 @@ impl SearchIndex {
             }
         }
 
-        self.query_cache = Some((norm_query, matched_indices));
+        if let Ok(mut guard) = self.query_cache.lock() {
+            *guard = Some((norm_query, matched_indices));
+        }
 
         scored_matches.sort_unstable_by(|a, b| b.score.cmp(&a.score));
 
@@ -317,10 +355,12 @@ impl SearchIndex {
         results
     }
 
+    #[allow(dead_code)]
     pub(crate) fn mark_dirty(&mut self) {
         self.dirty = true;
     }
 
+    #[allow(dead_code)]
     pub(crate) fn refresh_if_dirty(&mut self) {
         if self.dirty {
             if let Some(persistence) = self.persistence_path.clone() {
@@ -339,7 +379,9 @@ impl SearchIndex {
                 .map(|duration| duration.as_secs() as i64)
                 .unwrap_or_default();
             self.save(persistence_path);
-            self.query_cache = None;
+            if let Ok(mut guard) = self.query_cache.lock() {
+                *guard = None;
+            }
         }
     }
 }
@@ -793,7 +835,7 @@ mod tests {
 
         let r1 = index.search("co", 10);
         assert!(!r1.is_empty());
-        assert!(index.query_cache.is_some());
+        assert!(index.query_cache.lock().unwrap().is_some());
 
         let r2 = index.search("con", 10);
         assert!(!r2.is_empty());
