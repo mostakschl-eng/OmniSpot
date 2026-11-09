@@ -19,7 +19,7 @@ pub(crate) struct Candidate {
     pub character_mask: [u64; 2],
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ExtraAppItem {
     pub title: String,

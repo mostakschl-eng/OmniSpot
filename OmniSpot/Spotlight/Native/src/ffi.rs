@@ -1,7 +1,7 @@
 use crate::model::{Candidate, ExtraAppItem};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::slice;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, RwLock};
@@ -23,12 +23,27 @@ fn start_background_worker() {
 
                     if let Some(index_rw) = INDEX.get() {
                         let (roots, extra_apps, persistence) = match index_rw.read() {
-                            Ok(guard) => (guard.roots.clone(), guard.extra_apps.clone(), guard.persistence_path.clone()),
+                            Ok(guard) => (
+                                guard.roots.clone(),
+                                guard.extra_apps.clone(),
+                                guard.persistence_path.clone(),
+                            ),
                             Err(_) => continue,
                         };
                         if let Some(persistence_path) = persistence {
-                            let mut new_index = crate::index::SearchIndex::scan_all(&roots, &extra_apps, &persistence_path);
+                            let mut new_index = crate::index::SearchIndex::scan_all(
+                                &roots,
+                                &extra_apps,
+                                &persistence_path,
+                            );
                             if let Ok(mut guard) = index_rw.write() {
+                                if guard.roots != roots
+                                    || guard.extra_apps != extra_apps
+                                    || guard.persistence_path.as_deref()
+                                        != Some(persistence_path.as_path())
+                                {
+                                    continue;
+                                }
                                 guard.swap_entries(&mut new_index);
                                 guard.save(&persistence_path);
                             }
@@ -38,11 +53,6 @@ fn start_background_worker() {
             }
         });
     });
-}
-
-fn is_watchable_root(path: &Path) -> bool {
-    let s = path.to_string_lossy().to_ascii_lowercase();
-    s.contains("start menu") || s.contains("desktop") || s.ends_with("windowsapps")
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,22 +87,21 @@ struct RecordLaunchRequest {
 }
 
 fn write_json_response<T: serde::Serialize>(value: &T, output_len: *mut usize) -> *mut u8 {
-    let mut response = match serde_json::to_vec(value) {
+    let response = match serde_json::to_vec(value) {
         Ok(response) => response,
         Err(_) => return std::ptr::null_mut(),
     };
+    let response = response.into_boxed_slice();
     let length = response.len();
-    let pointer = response.as_mut_ptr();
-    std::mem::forget(response);
-    unsafe { *output_len = length; }
+    let pointer = Box::into_raw(response) as *mut u8;
+    unsafe {
+        *output_len = length;
+    }
     pointer
 }
 
 #[no_mangle]
-pub extern "C" fn omnispot_spotlight_initialize(
-    config_ptr: *const u8,
-    config_len: usize,
-) -> u32 {
+pub extern "C" fn omnispot_spotlight_initialize(config_ptr: *const u8, config_len: usize) -> u32 {
     if config_ptr.is_null() {
         return 0;
     }
@@ -101,32 +110,55 @@ pub extern "C" fn omnispot_spotlight_initialize(
         Ok(config) => config,
         Err(_) => return 0,
     };
-    let index = INDEX.get_or_init(|| RwLock::new(crate::index::SearchIndex::load(
-        std::path::Path::new(&config.persistence_path),
-    )));
-    let mut index = match index.write() {
-        Ok(index) => index,
-        Err(_) => return 0,
-    };
-    let extra_apps = config.extra_apps.unwrap_or_default();
-    let roots = config.roots.into_iter().map(PathBuf::from).collect::<Vec<_>>();
-    index.refresh_roots(&roots, &extra_apps, std::path::Path::new(&config.persistence_path));
-    drop(index);
-
     let watchers = WATCHERS.get_or_init(|| Mutex::new(Vec::new()));
     let mut watchers = match watchers.lock() {
         Ok(watchers) => watchers,
         Err(_) => return 0,
     };
+    let index = INDEX.get_or_init(|| {
+        RwLock::new(crate::index::SearchIndex::load(std::path::Path::new(
+            &config.persistence_path,
+        )))
+    });
+    let mut index = match index.write() {
+        Ok(index) => index,
+        Err(_) => return 0,
+    };
+    let extra_apps = config.extra_apps.unwrap_or_default();
+    let roots = config
+        .roots
+        .into_iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+    if index.roots == roots
+        && index.extra_apps == extra_apps
+        && index.persistence_path.as_deref() == Some(std::path::Path::new(&config.persistence_path))
+    {
+        return 1;
+    }
+    index.refresh_roots(
+        &roots,
+        &extra_apps,
+        std::path::Path::new(&config.persistence_path),
+    );
+    drop(index);
+
+    watchers.clear();
     for root in roots {
-        if !is_watchable_root(&root) {
-            continue;
-        }
-        let watcher_result = notify::recommended_watcher(|event: notify::Result<notify::Event>| {
-            if event.is_ok() {
-                DIRTY_FLAG.store(true, Ordering::Relaxed);
-            }
-        });
+        let persistence = PathBuf::from(&config.persistence_path);
+        let temporary = persistence.with_extension("tmp");
+        let watcher_result =
+            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                if event.is_ok_and(|event| {
+                    !matches!(event.kind, notify::EventKind::Access(_))
+                        && event
+                            .paths
+                            .iter()
+                            .any(|path| path != &persistence && path != &temporary)
+                }) {
+                    DIRTY_FLAG.store(true, Ordering::Relaxed);
+                }
+            });
         let mut watcher = match watcher_result {
             Ok(watcher) => watcher,
             Err(_) => continue,
@@ -180,7 +212,10 @@ pub extern "C" fn omnispot_spotlight_record_launch(
         None => return 0,
     };
     let mut index = index;
-    index.record_launch(&request.target, std::path::Path::new(&request.persistence_path));
+    index.record_launch(
+        &request.target,
+        std::path::Path::new(&request.persistence_path),
+    );
     1
 }
 
@@ -196,19 +231,13 @@ pub extern "C" fn omnispot_spotlight_search(
 
     let request_bytes = unsafe { slice::from_raw_parts(request_ptr, request_len) };
     let response = match serde_json::from_slice::<Request>(request_bytes) {
-        Ok(request) => crate::rank_candidates(&request.query, &request.candidates, request.max_results),
+        Ok(request) => {
+            crate::rank_candidates(&request.query, &request.candidates, request.max_results)
+        }
         Err(_) => Vec::new(),
     };
 
-    let mut bytes = match serde_json::to_vec(&response) {
-        Ok(bytes) => bytes,
-        Err(_) => return std::ptr::null_mut(),
-    };
-    let length = bytes.len();
-    let pointer = bytes.as_mut_ptr();
-    std::mem::forget(bytes);
-    unsafe { *output_len = length; }
-    pointer
+    write_json_response(&response, output_len)
 }
 
 #[no_mangle]
@@ -217,7 +246,9 @@ pub extern "C" fn omnispot_spotlight_free(pointer: *mut u8, length: usize) {
         return;
     }
     unsafe {
-        drop(Vec::from_raw_parts(pointer, length, length));
+        drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+            pointer, length,
+        )));
     }
 }
 
@@ -226,3 +257,18 @@ pub extern "C" fn omnispot_spotlight_version() -> u32 {
     1
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn json_response_round_trips_and_frees() {
+        let value = vec!["a".repeat(513), "Unicode: 日本語".to_string()];
+        let mut length = 0;
+        let pointer = write_json_response(&value, &mut length);
+        assert!(!pointer.is_null());
+        let decoded: Vec<String> =
+            serde_json::from_slice(unsafe { slice::from_raw_parts(pointer, length) }).unwrap();
+        assert_eq!(decoded, value);
+        omnispot_spotlight_free(pointer, length);
+    }
+}

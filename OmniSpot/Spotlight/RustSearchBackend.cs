@@ -104,6 +104,11 @@ internal sealed class RustSearchBackend
 
     public async Task RecordLaunchAsync(string target, CancellationToken cancellationToken = default)
     {
+        if (!IsAvailable)
+        {
+            return;
+        }
+
         WarmUp();
         await _indexInitialization.Value.WaitAsync(cancellationToken);
         await Task.Run(() =>
@@ -120,13 +125,14 @@ internal sealed class RustSearchBackend
         SearchResultType? resultType = null,
         CancellationToken cancellationToken = default)
     {
-        WarmUp();
-        await _indexInitialization.Value.WaitAsync(cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!IsAvailable)
+        if (!IsAvailable || maxResults <= 0)
         {
             return [];
         }
+
+        WarmUp();
+        await _indexInitialization.Value.WaitAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         return await Task.Run(() =>
         {
@@ -135,14 +141,14 @@ internal sealed class RustSearchBackend
             var requestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new RustIndexSearchRequest(query, fetchCount), JsonOptions));
             UIntPtr outputLength = UIntPtr.Zero;
             var outputPointer = NativeIndexSearch(requestBytes, (UIntPtr)requestBytes.Length, ref outputLength);
-            var managedLength = checked((int)outputLength.ToUInt64());
-            if (outputPointer == IntPtr.Zero || managedLength <= 0)
+            if (outputPointer == IntPtr.Zero)
             {
                 return [];
             }
 
             try
             {
+                var managedLength = checked((int)outputLength.ToUInt64());
                 cancellationToken.ThrowIfCancellationRequested();
                 var outputBytes = new byte[managedLength];
                 Marshal.Copy(outputPointer, outputBytes, 0, managedLength);

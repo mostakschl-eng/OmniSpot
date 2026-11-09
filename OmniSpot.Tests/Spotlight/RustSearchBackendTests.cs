@@ -31,12 +31,22 @@ public class RustSearchBackendTests
         _sut.WarmUp();
 
         // Act
-        var results = await _sut.SearchIndexedAsync("chatgpt", 5, cancellationToken: TestContext.Current.CancellationToken);
+        var results = await _sut.SearchIndexedAsync("notepad", 5, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().NotBeEmpty();
         results[0].Type.Should().Be(SearchResultType.App);
-        results[0].Title.Should().Be("ChatGPT");
+        results[0].Title.Should().Be("Notepad");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task SearchIndexedAsync_ReturnsEmpty_WhenLimitIsNotPositive(int maxResults)
+    {
+        var results = await _sut.SearchIndexedAsync("notepad", maxResults, cancellationToken: TestContext.Current.CancellationToken);
+
+        results.Should().BeEmpty();
     }
 
     [Fact]
@@ -125,4 +135,3 @@ public class RustSearchBackendTests
         exception.Should().BeNull();
     }
 }
-

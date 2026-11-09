@@ -1,6 +1,10 @@
 use crate::model::{Candidate, Match};
 
-pub(crate) fn rank_candidates(query: &str, candidates: &[Candidate], max_results: usize) -> Vec<Match> {
+pub(crate) fn rank_candidates(
+    query: &str,
+    candidates: &[Candidate],
+    max_results: usize,
+) -> Vec<Match> {
     let query = normalize(query);
     if query.is_empty() {
         return Vec::new();
@@ -10,18 +14,30 @@ pub(crate) fn rank_candidates(query: &str, candidates: &[Candidate], max_results
     let mut matches: Vec<Match> = candidates
         .iter()
         .filter_map(|candidate| {
+            let normalized_title;
             let title = if candidate.normalized_title.is_empty() {
-                &candidate.title
+                normalized_title = normalize(&candidate.title);
+                &normalized_title
             } else {
                 &candidate.normalized_title
             };
+            let normalized_alt;
             let alt = if candidate.normalized_alternate_name.is_empty() {
-                &candidate.alternate_name
+                normalized_alt = normalize(&candidate.alternate_name);
+                &normalized_alt
             } else {
                 &candidate.normalized_alternate_name
             };
 
-            let score = score_query(&query, query_mask, title, alt, candidate.character_mask)?;
+            let tm = compute_mask(title);
+            let am = compute_mask(alt);
+            let score = score_query(
+                &query,
+                query_mask,
+                title,
+                alt,
+                [tm[0] | am[0], tm[1] | am[1]],
+            )?;
             Some(Match {
                 id: candidate.id,
                 score: score + candidate.base_score + candidate.usage_boost,
@@ -30,7 +46,10 @@ pub(crate) fn rank_candidates(query: &str, candidates: &[Candidate], max_results
         .collect();
 
     matches.sort_unstable_by(|left, right| {
-        right.score.cmp(&left.score).then_with(|| left.id.cmp(&right.id))
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.id.cmp(&right.id))
     });
     matches.truncate(max_results);
     matches
@@ -106,7 +125,10 @@ pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
         }
     }
 
-    let tokens: Vec<&str> = normalized.split(' ').filter(|token| !token.is_empty()).collect();
+    let tokens: Vec<&str> = normalized
+        .split(' ')
+        .filter(|token| !token.is_empty())
+        .collect();
 
     // 1. Exact token match (e.g. query "chrome" matching word "chrome" in "Google Chrome" or "Chrome Remote Desktop")
     if let Some(token_pos) = tokens.iter().position(|&token| token == query) {
@@ -155,7 +177,9 @@ pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
         let query_tokens: Vec<&str> = query.split(' ').filter(|token| !token.is_empty()).collect();
         if query_tokens.len() > 1
             && query_tokens.iter().all(|query_token| {
-                tokens.iter().any(|candidate_token| candidate_token.starts_with(query_token))
+                tokens
+                    .iter()
+                    .any(|candidate_token| candidate_token.starts_with(query_token))
             })
         {
             return Some(840);
@@ -216,12 +240,12 @@ pub(crate) fn score_normalized(query: &str, normalized: &str) -> Option<i32> {
         return None;
     }
 
-    let boundary_bonus = if first == 0 || normalized.as_bytes().get(first.wrapping_sub(1)) == Some(&b' ') {
+    let boundary_bonus = if first == 0 || candidate_chars.get(first.wrapping_sub(1)) == Some(&' ') {
         60
     } else {
         0
     };
-    Some(400 + compactness + (best_consecutive as i32 * 12) + boundary_bonus)
+    Some(400 + compactness + (best_consecutive * 12) + boundary_bonus)
 }
 
 pub(crate) fn normalize(value: &str) -> String {
@@ -262,15 +286,39 @@ mod tests {
     use super::score_text;
 
     #[test]
+    fn ranks_candidates_without_precomputed_fields() {
+        let candidate: crate::model::Candidate =
+            serde_json::from_str(r#"{"id":7,"title":"Google Chrome"}"#).unwrap();
+        let results = super::rank_candidates("chrome", &[candidate], 10);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 7);
+    }
+
+    #[test]
+    fn fuzzy_boundary_bonus_uses_characters_for_unicode_titles() {
+        assert_eq!(
+            score_text("ace", "日本 abcd ef"),
+            score_text("ace", "abcd ef")
+        );
+    }
+
+    #[test]
     fn ranks_canonical_product_above_compound_modifier_titles() {
         let chrome_main = score_text("chrome", "Google Chrome").unwrap();
         let chrome_pwa = score_text("chrome", "Chrome Remote Desktop").unwrap();
-        assert!(chrome_main > chrome_pwa, "Google Chrome ({}) should beat Chrome Remote Desktop ({})", chrome_main, chrome_pwa);
+        assert!(
+            chrome_main > chrome_pwa,
+            "Google Chrome ({}) should beat Chrome Remote Desktop ({})",
+            chrome_main,
+            chrome_pwa
+        );
     }
 
     #[test]
     fn ranks_exact_and_prefix_matches_above_fuzzy_matches() {
-        assert!(score_text("chrome", "Chrome").unwrap() > score_text("chr", "Google Chrome").unwrap());
+        assert!(
+            score_text("chrome", "Chrome").unwrap() > score_text("chr", "Google Chrome").unwrap()
+        );
         assert!(score_text("gch", "Google Chrome").is_some());
     }
 

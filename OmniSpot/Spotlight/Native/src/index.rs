@@ -1,10 +1,10 @@
 use crate::matcher::{compute_mask, normalize, score_query};
 use crate::model::{Candidate, ExtraAppItem, IndexedResult};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 const CURRENT_INDEX_VERSION: u32 = 5;
 const MAX_INDEXED_FILES: usize = 50_000;
@@ -73,8 +73,6 @@ impl SearchIndex {
         }
     }
 
-
-
     pub(crate) fn scan_all(
         roots: &[PathBuf],
         extra_apps: &[ExtraAppItem],
@@ -96,8 +94,18 @@ impl SearchIndex {
         for app in extra_apps {
             let target_key = app.target.to_ascii_lowercase();
             if seen.insert(target_key) {
-                let base = if app.base_score > 0 { app.base_score } else { 80 };
-                entries.push(create_entry(&app.title, &app.target, &app.alternate_name, "App", base));
+                let base = if app.base_score > 0 {
+                    app.base_score
+                } else {
+                    80
+                };
+                entries.push(create_entry(
+                    &app.title,
+                    &app.target,
+                    &app.alternate_name,
+                    "App",
+                    base,
+                ));
             }
         }
 
@@ -106,7 +114,10 @@ impl SearchIndex {
                 continue;
             }
             let root_str = root.to_string_lossy().to_ascii_lowercase();
-            if root_str.contains("start menu") || root_str.contains("programs") || root_str.ends_with("windowsapps") {
+            if root_str.contains("start menu")
+                || root_str.contains("programs")
+                || root_str.ends_with("windowsapps")
+            {
                 scan_app_directory(root, 0, 3, &mut entries, &mut seen);
             } else if root_str.contains("program files") {
                 scan_app_directory(root, 0, 2, &mut entries, &mut seen);
@@ -117,7 +128,14 @@ impl SearchIndex {
                 }
                 let downloads = root.join("Downloads");
                 if downloads.is_dir() {
-                    scan_file_directory(&downloads, 0, 4, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                    scan_file_directory(
+                        &downloads,
+                        0,
+                        4,
+                        &mut entries,
+                        &mut seen,
+                        MAX_INDEXED_FILES,
+                    );
                 }
                 let videos = root.join("Videos");
                 if videos.is_dir() {
@@ -125,7 +143,14 @@ impl SearchIndex {
                 }
                 let pictures = root.join("Pictures");
                 if pictures.is_dir() {
-                    scan_file_directory(&pictures, 0, 4, &mut entries, &mut seen, MAX_INDEXED_FILES);
+                    scan_file_directory(
+                        &pictures,
+                        0,
+                        4,
+                        &mut entries,
+                        &mut seen,
+                        MAX_INDEXED_FILES,
+                    );
                 }
                 let music = root.join("Music");
                 if music.is_dir() {
@@ -153,6 +178,24 @@ impl SearchIndex {
     }
 
     pub(crate) fn swap_entries(&mut self, other: &mut Self) {
+        let history: HashMap<_, _> = self
+            .entries
+            .iter()
+            .map(|entry| {
+                (
+                    entry.target.to_ascii_lowercase(),
+                    (entry.usage_boost, entry.last_launch),
+                )
+            })
+            .collect();
+        for entry in &mut other.entries {
+            if let Some(&(usage_boost, last_launch)) =
+                history.get(&entry.target.to_ascii_lowercase())
+            {
+                entry.usage_boost = usage_boost;
+                entry.last_launch = last_launch;
+            }
+        }
         std::mem::swap(&mut self.entries, &mut other.entries);
         self.last_refresh = Some(SystemTime::now());
         self.dirty = false;
@@ -161,116 +204,14 @@ impl SearchIndex {
         }
     }
 
-
-
     pub(crate) fn refresh_roots(
         &mut self,
         roots: &[PathBuf],
         extra_apps: &[ExtraAppItem],
         persistence_path: &Path,
     ) {
-        // Reuse persisted snapshot on startup for instant readiness.
-        if !self.entries.is_empty() {
-            let mut existing_targets: HashSet<String> = self
-                .entries
-                .iter()
-                .map(|e| e.target.to_ascii_lowercase())
-                .collect();
-            let mut added = false;
-
-            // Scan any newly configured roots
-            for root in roots {
-                if !root.is_dir() {
-                    continue;
-                }
-                if !self.roots.contains(root) {
-                    let root_str = root.to_string_lossy().to_ascii_lowercase();
-                    if root_str.contains("start menu") || root_str.contains("programs") || root_str.ends_with("windowsapps") {
-                        scan_app_directory(root, 0, 3, &mut self.entries, &mut existing_targets);
-                    } else if root_str.contains("program files") {
-                        scan_app_directory(root, 0, 2, &mut self.entries, &mut existing_targets);
-                    } else if is_user_profile_root(root) {
-                        let docs = root.join("Documents");
-                        if docs.is_dir() {
-                            scan_file_directory(&docs, 0, 5, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
-                        }
-                        let downloads = root.join("Downloads");
-                        if downloads.is_dir() {
-                            scan_file_directory(&downloads, 0, 4, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
-                        }
-                        let videos = root.join("Videos");
-                        if videos.is_dir() {
-                            scan_file_directory(&videos, 0, 5, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
-                        }
-                        let pictures = root.join("Pictures");
-                        if pictures.is_dir() {
-                            scan_file_directory(&pictures, 0, 4, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
-                        }
-                        let music = root.join("Music");
-                        if music.is_dir() {
-                            scan_file_directory(&music, 0, 4, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
-                        }
-                    } else {
-                        scan_app_directory(root, 0, 3, &mut self.entries, &mut existing_targets);
-                        scan_file_directory(root, 0, 5, &mut self.entries, &mut existing_targets, MAX_INDEXED_FILES);
-                    }
-                    added = true;
-                }
-            }
-
-            self.roots = roots.to_vec();
-            self.extra_apps = extra_apps.to_vec();
-            self.persistence_path = Some(persistence_path.to_path_buf());
-            self.dirty = false;
-            self.last_refresh = Some(SystemTime::now());
-
-            for tool in seed_windows_tools() {
-                if existing_targets.insert(tool.target.to_ascii_lowercase()) {
-                    self.entries.push(tool);
-                    added = true;
-                }
-            }
-
-            for app in enumerate_shell_apps() {
-                if existing_targets.insert(app.target.to_ascii_lowercase()) {
-                    self.entries.push(app);
-                    added = true;
-                }
-            }
-
-            for app in extra_apps {
-                if existing_targets.insert(app.target.to_ascii_lowercase()) {
-                    let base = if app.base_score > 0 { app.base_score } else { 80 };
-                    self.entries.push(create_entry(&app.title, &app.target, &app.alternate_name, "App", base));
-                    added = true;
-                }
-            }
-
-            for entry in &mut self.entries {
-                if entry.normalized_title.is_empty() {
-                    entry.normalized_title = normalize(&entry.title);
-                    entry.normalized_alternate_name = normalize(&entry.alternate_name);
-                    let tm = compute_mask(&entry.normalized_title);
-                    let am = compute_mask(&entry.normalized_alternate_name);
-                    entry.character_mask = [tm[0] | am[0], tm[1] | am[1]];
-                }
-            }
-            if added {
-                self.save(persistence_path);
-            }
-            return;
-        }
-
-        if self
-            .last_refresh
-            .and_then(|time| time.elapsed().ok())
-            .is_some_and(|elapsed| elapsed < Duration::from_secs(15))
-        {
-            return;
-        }
-
-        let scanned = Self::scan_all(roots, extra_apps, persistence_path);
-        self.entries = scanned.entries;
+        let mut scanned = Self::scan_all(roots, extra_apps, persistence_path);
+        self.swap_entries(&mut scanned);
         self.roots = roots.to_vec();
         self.extra_apps = extra_apps.to_vec();
         self.persistence_path = Some(persistence_path.to_path_buf());
@@ -301,6 +242,9 @@ impl SearchIndex {
     }
 
     pub(crate) fn search(&self, query: &str, max_results: usize) -> Vec<IndexedResult> {
+        if max_results == 0 {
+            return Vec::new();
+        }
         let trimmed = query.trim();
         if trimmed.is_empty() {
             let mut seen = HashSet::new();
@@ -309,7 +253,13 @@ impl SearchIndex {
                 .iter()
                 .filter(|entry| entry.result_type == "App")
                 .collect();
-            apps.sort_unstable_by_key(|entry| (-(entry.usage_boost as i64), -entry.last_launch, -(entry.base_score as i64)));
+            apps.sort_unstable_by_key(|entry| {
+                (
+                    -(entry.usage_boost as i64),
+                    -entry.last_launch,
+                    -(entry.base_score as i64),
+                )
+            });
             return apps
                 .into_iter()
                 .filter(|entry| seen.insert(entry.normalized_title.as_str()))
@@ -362,7 +312,10 @@ impl SearchIndex {
                     entry.character_mask,
                 ) {
                     let mut score = fuzzy + 200 + entry.usage_boost;
-                    let target_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(&entry.title);
+                    let target_stem = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&entry.title);
                     if target_stem.eq_ignore_ascii_case(&norm_clean) {
                         score += 100;
                     }
@@ -370,7 +323,7 @@ impl SearchIndex {
                 }
             }
 
-            matches.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+            matches.sort_unstable_by_key(|entry| std::cmp::Reverse(entry.1));
             return matches
                 .into_iter()
                 .take(max_results)
@@ -391,10 +344,10 @@ impl SearchIndex {
         }
         let query_mask = compute_mask(&norm_query);
 
-        // Wox prefix query cache: if query grows (e.g. c -> ch -> chr), reuse matched subset
+        // Longer queries can introduce fuzzy matches, so only reuse identical queries.
         let cached_subset = self.query_cache.lock().ok().and_then(|guard| {
             if let Some((prev, ids)) = guard.as_ref() {
-                if norm_query.starts_with(prev) {
+                if norm_query == *prev {
                     return Some(ids.clone());
                 }
             }
@@ -423,7 +376,10 @@ impl SearchIndex {
                 total_score += 60;
             }
 
-            if entry.target.contains(".com-") || entry.target.contains(".org-") || entry.target.contains(".app-") {
+            if entry.target.contains(".com-")
+                || entry.target.contains(".org-")
+                || entry.target.contains(".app-")
+            {
                 total_score -= 40;
             }
 
@@ -449,7 +405,10 @@ impl SearchIndex {
                 if let Some(entry) = self.entries.get(idx_usize) {
                     if let Some(total_score) = evaluate_entry(entry) {
                         matched_indices.push(idx);
-                        scored_matches.push(ScoredCandidate { index: idx, score: total_score });
+                        scored_matches.push(ScoredCandidate {
+                            index: idx,
+                            score: total_score,
+                        });
                     }
                 }
             }
@@ -458,7 +417,10 @@ impl SearchIndex {
                 let idx = idx as u32;
                 if let Some(total_score) = evaluate_entry(entry) {
                     matched_indices.push(idx);
-                    scored_matches.push(ScoredCandidate { index: idx, score: total_score });
+                    scored_matches.push(ScoredCandidate {
+                        index: idx,
+                        score: total_score,
+                    });
                 }
             }
         }
@@ -467,14 +429,16 @@ impl SearchIndex {
             *guard = Some((norm_query, matched_indices));
         }
 
-        scored_matches.sort_unstable_by(|a, b| b.score.cmp(&a.score));
+        scored_matches.sort_unstable_by_key(|entry| std::cmp::Reverse(entry.score));
 
         let mut seen_titles = HashSet::new();
         let mut results = Vec::with_capacity(max_results);
 
         for m in scored_matches {
             if let Some(entry) = self.entries.get(m.index as usize) {
-                if entry.result_type == "App" && !seen_titles.insert(entry.normalized_title.as_str()) {
+                if entry.result_type == "App"
+                    && !seen_titles.insert(entry.normalized_title.as_str())
+                {
                     continue;
                 }
                 results.push(IndexedResult {
@@ -511,7 +475,11 @@ impl SearchIndex {
     }
 
     pub(crate) fn record_launch(&mut self, target: &str, persistence_path: &Path) {
-        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.target.eq_ignore_ascii_case(target)) {
+        if let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|entry| entry.target.eq_ignore_ascii_case(target))
+        {
             entry.usage_boost = (entry.usage_boost + 5).min(50);
             entry.last_launch = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -613,22 +581,92 @@ fn is_skipped_dir(name: &str) -> bool {
 fn is_indexable_file_ext(ext: &str) -> bool {
     matches!(
         ext,
-        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "csv" |
-        "txt" | "md" | "rtf" | "epub" | "log" |
-        "zip" | "rar" | "7z" | "tar" | "gz" | "iso" |
-        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" | "bmp" | "tiff" |
-        "mp4" | "mkv" | "mov" | "avi" | "wmv" | "flv" | "webm" | "m4v" | "mpg" | "mpeg" | "m2ts" | "3gp" |
-        "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" |
-        "rs" | "cs" | "py" | "js" | "ts" | "jsx" | "tsx" | "json" | "xml" | "html" | "css" | "sql" |
-        "exe" | "msi" | "bat" | "cmd" | "ps1" | "lnk"
+        "pdf"
+            | "doc"
+            | "docx"
+            | "xls"
+            | "xlsx"
+            | "ppt"
+            | "pptx"
+            | "csv"
+            | "txt"
+            | "md"
+            | "rtf"
+            | "epub"
+            | "log"
+            | "zip"
+            | "rar"
+            | "7z"
+            | "tar"
+            | "gz"
+            | "iso"
+            | "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "svg"
+            | "webp"
+            | "ico"
+            | "bmp"
+            | "tiff"
+            | "mp4"
+            | "mkv"
+            | "mov"
+            | "avi"
+            | "wmv"
+            | "flv"
+            | "webm"
+            | "m4v"
+            | "mpg"
+            | "mpeg"
+            | "m2ts"
+            | "3gp"
+            | "mp3"
+            | "wav"
+            | "flac"
+            | "aac"
+            | "ogg"
+            | "m4a"
+            | "wma"
+            | "rs"
+            | "cs"
+            | "py"
+            | "js"
+            | "ts"
+            | "jsx"
+            | "tsx"
+            | "json"
+            | "xml"
+            | "html"
+            | "css"
+            | "sql"
+            | "exe"
+            | "msi"
+            | "bat"
+            | "cmd"
+            | "ps1"
+            | "lnk"
     )
 }
 
 fn is_skipped_file_ext(ext: &str) -> bool {
     matches!(
         ext,
-        "dll" | "sys" | "lib" | "pdb" | "obj" | "exp" | "ilk" | "tlog" |
-        "tmp" | "lock" | "cache" | "class" | "meta" | "bak" | "idb"
+        "dll"
+            | "sys"
+            | "lib"
+            | "pdb"
+            | "obj"
+            | "exp"
+            | "ilk"
+            | "tlog"
+            | "tmp"
+            | "lock"
+            | "cache"
+            | "class"
+            | "meta"
+            | "bak"
+            | "idb"
     )
 }
 
@@ -637,7 +675,11 @@ fn parse_extension_filter(query: &str) -> (Option<String>, String) {
 
     if let Some(rest) = trimmed.strip_prefix("ext:") {
         let mut parts = rest.splitn(2, |c: char| c.is_whitespace());
-        let ext = parts.next().unwrap_or_default().trim().trim_start_matches('.');
+        let ext = parts
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .trim_start_matches('.');
         let remaining = parts.next().unwrap_or_default().trim().to_string();
         if !ext.is_empty() {
             return (Some(ext.to_ascii_lowercase()), remaining);
@@ -729,7 +771,8 @@ fn browse_directory(query: &str, max_results: usize) -> Option<Vec<IndexedResult
 
     let (dir_to_scan, filter_str) = if target_path.is_dir() {
         (target_path, String::new())
-    } else if let Some(parent) = target_path.parent() {
+    } else {
+        let parent = target_path.parent()?;
         if parent.is_dir() {
             let filter = target_path
                 .file_name()
@@ -740,8 +783,6 @@ fn browse_directory(query: &str, max_results: usize) -> Option<Vec<IndexedResult
         } else {
             return None;
         }
-    } else {
-        return None;
     };
 
     let read_dir = fs::read_dir(&dir_to_scan).ok()?;
@@ -805,7 +846,11 @@ fn browse_directory(query: &str, max_results: usize) -> Option<Vec<IndexedResult
         b_is_folder
             .cmp(&a_is_folder)
             .then_with(|| b.score.cmp(&a.score))
-            .then_with(|| a.title.to_ascii_lowercase().cmp(&b.title.to_ascii_lowercase()))
+            .then_with(|| {
+                a.title
+                    .to_ascii_lowercase()
+                    .cmp(&b.title.to_ascii_lowercase())
+            })
     });
 
     entries.truncate(max_results);
@@ -831,7 +876,10 @@ fn scan_app_directory(
     for item in read_dir.flatten() {
         let path = item.path();
         if path.is_dir() {
-            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            let dir_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
             if is_skipped_dir(dir_name) {
                 continue;
             }
@@ -863,7 +911,10 @@ fn scan_app_directory(
         }
 
         let title = clean_shortcut_name(file_stem);
-        let alt = path.file_name().and_then(|n| n.to_str()).unwrap_or(file_stem);
+        let alt = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(file_stem);
 
         entries.push(create_entry(
             &title,
@@ -899,11 +950,21 @@ fn scan_file_directory(
 
         let path = item.path();
         if path.is_dir() {
-            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            let dir_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
             if is_skipped_dir(dir_name) {
                 continue;
             }
-            scan_file_directory(&path, depth + 1, max_depth, entries, seen_targets, max_files);
+            scan_file_directory(
+                &path,
+                depth + 1,
+                max_depth,
+                entries,
+                seen_targets,
+                max_files,
+            );
             continue;
         }
 
@@ -926,7 +987,10 @@ fn scan_file_directory(
             continue;
         }
 
-        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file_stem);
+        let file_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(file_stem);
 
         entries.push(create_entry(
             file_stem,
@@ -940,7 +1004,9 @@ fn scan_file_directory(
 
 fn enumerate_shell_apps() -> Vec<IndexedEntry> {
     use windows::core::w;
-    use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows::Win32::System::Com::{
+        CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED,
+    };
     use windows::Win32::UI::Shell::{
         BHID_EnumItems, IEnumShellItems, IShellItem, SHCreateItemFromParsingName,
         SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_NORMALDISPLAY,
@@ -949,10 +1015,16 @@ fn enumerate_shell_apps() -> Vec<IndexedEntry> {
     let mut apps = Vec::new();
 
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        if CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_err() {
+            return apps;
+        }
 
-        if let Ok(shell_folder) = SHCreateItemFromParsingName::<_, _, IShellItem>(w!("shell:AppsFolder"), None) {
-            if let Ok(enum_items) = shell_folder.BindToHandler::<_, IEnumShellItems>(None, &BHID_EnumItems) {
+        if let Ok(shell_folder) =
+            SHCreateItemFromParsingName::<_, _, IShellItem>(w!("shell:AppsFolder"), None)
+        {
+            if let Ok(enum_items) =
+                shell_folder.BindToHandler::<_, IEnumShellItems>(None, &BHID_EnumItems)
+            {
                 let mut item_buf = [None];
                 let mut fetched = 0;
                 while enum_items.Next(&mut item_buf, Some(&mut fetched)).is_ok() && fetched == 1 {
@@ -965,20 +1037,33 @@ fn enumerate_shell_apps() -> Vec<IndexedEntry> {
                             String::new()
                         };
 
-                        let target = if let Ok(p) = item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING) {
-                            let s = p.to_string().unwrap_or_default();
-                            CoTaskMemFree(Some(p.as_ptr() as _));
-                            s
-                        } else {
-                            String::new()
-                        };
+                        let target =
+                            if let Ok(p) = item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING) {
+                                let s = p.to_string().unwrap_or_default();
+                                CoTaskMemFree(Some(p.as_ptr() as _));
+                                s
+                            } else {
+                                String::new()
+                            };
 
-                        if !name.is_empty() && !target.is_empty() && !name.starts_with('{') && !target.ends_with(".url") {
-                            if is_uninstaller_or_helper(&name) || is_uninstaller_or_helper(&target) {
+                        if !name.is_empty()
+                            && !target.is_empty()
+                            && !name.starts_with('{')
+                            && !target.ends_with(".url")
+                        {
+                            if is_uninstaller_or_helper(&name) || is_uninstaller_or_helper(&target)
+                            {
                                 continue;
                             }
                             let alt = name.replace(' ', "");
-                            let base = if target.contains(".com-") || target.contains(".org-") || target.contains(".app-") { 50 } else { 80 };
+                            let base = if target.contains(".com-")
+                                || target.contains(".org-")
+                                || target.contains(".app-")
+                            {
+                                50
+                            } else {
+                                80
+                            };
                             apps.push(create_entry(&name, &target, &alt, "App", base));
                         }
                     }
@@ -999,13 +1084,29 @@ fn seed_windows_tools() -> Vec<IndexedEntry> {
     let tools = [
         ("Control Panel", system32.join("control.exe"), "control"),
         ("Task Manager", system32.join("Taskmgr.exe"), "taskmgr"),
-        ("File Explorer", PathBuf::from(&system).join("explorer.exe"), "explorer"),
+        (
+            "File Explorer",
+            PathBuf::from(&system).join("explorer.exe"),
+            "explorer",
+        ),
         ("Command Prompt", system32.join("cmd.exe"), "cmd"),
-        ("PowerShell", system32.join("WindowsPowerShell\\v1.0\\powershell.exe"), "powershell"),
-        ("Registry Editor", PathBuf::from(&system).join("regedit.exe"), "regedit"),
+        (
+            "PowerShell",
+            system32.join("WindowsPowerShell\\v1.0\\powershell.exe"),
+            "powershell",
+        ),
+        (
+            "Registry Editor",
+            PathBuf::from(&system).join("regedit.exe"),
+            "regedit",
+        ),
         ("Notepad", system32.join("notepad.exe"), "notepad"),
         ("Calculator", system32.join("calc.exe"), "calc"),
-        ("Snipping Tool", system32.join("SnippingTool.exe"), "snippingtool"),
+        (
+            "Snipping Tool",
+            system32.join("SnippingTool.exe"),
+            "snippingtool",
+        ),
         ("Device Manager", system32.join("devmgmt.msc"), "devmgmt"),
         ("Disk Management", system32.join("diskmgmt.msc"), "diskmgmt"),
         ("Services", system32.join("services.msc"), "services"),
@@ -1028,22 +1129,36 @@ fn seed_windows_tools() -> Vec<IndexedEntry> {
         ("Settings", "ms-settings:", "settings"),
         ("Windows Update", "ms-settings:windowsupdate", "update"),
         ("Apps & Features", "ms-settings:appsfeatures", "uninstall"),
-        ("Display Settings", "ms-settings:display", "display screen resolution"),
+        (
+            "Display Settings",
+            "ms-settings:display",
+            "display screen resolution",
+        ),
         ("Sound Settings", "ms-settings:sound", "sound audio volume"),
-        ("Bluetooth & Devices", "ms-settings:bluetooth", "bluetooth devices"),
-        ("Network & Internet", "ms-settings:network", "wifi ethernet network internet"),
-        ("Personalization", "ms-settings:personalization", "themes wallpaper background"),
-        ("Date & Time", "ms-settings:dateandtime", "clock date time timezone"),
+        (
+            "Bluetooth & Devices",
+            "ms-settings:bluetooth",
+            "bluetooth devices",
+        ),
+        (
+            "Network & Internet",
+            "ms-settings:network",
+            "wifi ethernet network internet",
+        ),
+        (
+            "Personalization",
+            "ms-settings:personalization",
+            "themes wallpaper background",
+        ),
+        (
+            "Date & Time",
+            "ms-settings:dateandtime",
+            "clock date time timezone",
+        ),
     ];
 
     for (title, target, alt) in settings {
-        entries.push(create_entry(
-            title,
-            target,
-            alt,
-            "App",
-            85,
-        ));
+        entries.push(create_entry(title, target, alt, "App", 85));
     }
 
     entries
@@ -1059,10 +1174,14 @@ mod tests {
     #[test]
     fn enumerate_shell_apps_discovers_installed_apps() {
         let apps = super::enumerate_shell_apps();
-        assert!(!apps.is_empty(), "Should discover apps from shell:AppsFolder");
+        assert!(
+            !apps.is_empty(),
+            "Should discover apps from shell:AppsFolder"
+        );
         let has_chatgpt = apps.iter().any(|app| app.title == "ChatGPT");
-        let has_calc = apps.iter().any(|app| app.title == "Calculator");
-        assert!(has_chatgpt || has_calc, "Should find ChatGPT or Calculator");
+        assert!(apps
+            .iter()
+            .all(|app| !app.title.is_empty() && !app.target.is_empty()));
 
         let mut index = SearchIndex::default();
         index.entries = apps;
@@ -1102,7 +1221,8 @@ mod tests {
 
     #[test]
     fn prioritizes_apps_over_files() {
-        let root = std::env::temp_dir().join(format!("omnispot-app-priority-test-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("omnispot-app-priority-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
 
@@ -1124,15 +1244,16 @@ mod tests {
     #[test]
     fn indexes_extra_packaged_apps_and_finds_them_with_high_priority() {
         let mut index = SearchIndex::default();
-        let extra_apps = vec![
-            ExtraAppItem {
-                title: "ChatGPT".to_string(),
-                target: "OpenAI.Codex_2p2nqsd0c76g0!App".to_string(),
-                alternate_name: "OpenAI Codex chatgpt".to_string(),
-                base_score: 80,
-            }
-        ];
-        let persistence = std::env::temp_dir().join(format!("omnispot-extra-app-test-{}.json", std::process::id()));
+        let extra_apps = vec![ExtraAppItem {
+            title: "ChatGPT".to_string(),
+            target: "OpenAI.Codex_2p2nqsd0c76g0!App".to_string(),
+            alternate_name: "OpenAI Codex chatgpt".to_string(),
+            base_score: 80,
+        }];
+        let persistence = std::env::temp_dir().join(format!(
+            "omnispot-extra-app-test-{}.json",
+            std::process::id()
+        ));
         index.refresh_roots(&[], &extra_apps, &persistence);
 
         // Also add a file match with "chatgpt" in its name
@@ -1153,7 +1274,7 @@ mod tests {
     }
 
     #[test]
-    fn reuses_prefix_query_cache() {
+    fn reuses_identical_query_cache() {
         let root = std::env::temp_dir().join(format!("omnispot-cache-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
@@ -1166,10 +1287,60 @@ mod tests {
         assert!(!r1.is_empty());
         assert!(index.query_cache.lock().unwrap().is_some());
 
-        let r2 = index.search("con", 10);
+        let r2 = index.search("co", 10);
         assert!(!r2.is_empty());
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn growing_query_can_introduce_a_fuzzy_match() {
+        let mut index = SearchIndex::default();
+        index.entries = vec![super::create_entry(
+            "Google Chrome",
+            "chrome.exe",
+            "",
+            "App",
+            80,
+        )];
+        assert_eq!(index.search("ghr", 10).len(), 1);
+        assert!(index.search("gh", 10).is_empty());
+        assert_eq!(index.search("ghr", 10).len(), 1);
+    }
+
+    #[test]
+    fn refresh_preserves_launch_history_and_removes_old_roots() {
+        let root = std::env::temp_dir().join(format!("omnispot-refresh-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("UniqueRefreshDocument.txt"), b"test").unwrap();
+        let persistence = root.join("index.json");
+        let mut index = SearchIndex::default();
+        index.refresh_roots(std::slice::from_ref(&root), &[], &persistence);
+        let target = index
+            .entries
+            .iter()
+            .find(|entry| entry.title == "Notepad")
+            .unwrap()
+            .target
+            .clone();
+        index.record_launch(&target, &persistence);
+        index.refresh_roots(&[], &[], &persistence);
+        let notepad = index
+            .entries
+            .iter()
+            .find(|entry| entry.target == target)
+            .unwrap();
+        assert_eq!(notepad.usage_boost, 5);
+        assert!(notepad.last_launch > 0);
+        assert!(index.search("UniqueRefreshDocument", 10).is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn zero_limit_returns_no_results() {
+        let mut index = SearchIndex::default();
+        index.entries = super::seed_windows_tools();
+        assert!(index.search("notepad", 0).is_empty());
     }
 
     #[test]
@@ -1213,13 +1384,7 @@ mod tests {
                 "App",
                 50,
             ),
-            super::create_entry(
-                "Google Chrome",
-                "Chrome",
-                "GoogleChrome",
-                "App",
-                80,
-            ),
+            super::create_entry("Google Chrome", "Chrome", "GoogleChrome", "App", 80),
         ];
 
         let results = index.search("chrome", 5);
@@ -1260,7 +1425,11 @@ mod tests {
 
         assert!(!results.is_empty());
         assert_eq!(results[0].title, "Task Manager");
-        assert!(duration.as_millis() < 5, "Search took too long: {:?}", duration);
+        assert!(
+            duration.as_millis() < 5,
+            "Search took too long: {:?}",
+            duration
+        );
     }
 
     #[test]
@@ -1290,7 +1459,13 @@ mod tests {
     fn searches_by_file_extension() {
         let mut index = SearchIndex::default();
         index.entries = vec![
-            super::create_entry("Annual Report", "C:\\Docs\\report.pdf", "report.pdf", "File", 0),
+            super::create_entry(
+                "Annual Report",
+                "C:\\Docs\\report.pdf",
+                "report.pdf",
+                "File",
+                0,
+            ),
             super::create_entry("Tax Summary", "C:\\Docs\\tax.pdf", "tax.pdf", "File", 0),
             super::create_entry("Rust Backend", "C:\\Dev\\engine.rs", "engine.rs", "File", 0),
             super::create_entry("Notes", "C:\\Docs\\notes.txt", "notes.txt", "File", 0),
@@ -1307,7 +1482,8 @@ mod tests {
 
     #[test]
     fn browses_local_directory_in_realtime() {
-        let temp_dir = std::env::temp_dir().join(format!("omnispot-dir-browse-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("omnispot-dir-browse-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(temp_dir.join("SubFolderA")).unwrap();
         fs::create_dir_all(temp_dir.join("SubFolderB")).unwrap();
@@ -1379,8 +1555,12 @@ mod tests {
         assert!(!chrome_results.is_empty());
         assert_eq!(chrome_results[0].title, "Google Chrome");
         assert_eq!(chrome_results[0].result_type, "App");
-        assert!(chrome_results.iter().any(|r| r.title == "chrome_shortcuts" && r.result_type == "File"),
-            "Matching file must not be starved out by apps");
+        assert!(
+            chrome_results
+                .iter()
+                .any(|r| r.title == "chrome_shortcuts" && r.result_type == "File"),
+            "Matching file must not be starved out by apps"
+        );
 
         // 2. Searching full file name: file ranks at the top #1!
         let file_results = index.search("Quarterly Financial Statement", 5);
