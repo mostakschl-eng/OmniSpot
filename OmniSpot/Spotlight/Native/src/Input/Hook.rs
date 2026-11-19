@@ -24,8 +24,8 @@ pub(crate) enum Warning {
     KeyEventsStealing,
 }
 
-// The existing C# UI/services are not connected to this port yet. A host must route
-// keyboard, timer and dispatcher callbacks to the corresponding Hook methods.
+// UI, timers, logging and elevation inspection are host callbacks; key-event decisions
+// and application switching stay in this Rust engine.
 pub(crate) trait HookHost {
     fn subscribe_keyboard(&mut self) -> Result<(), RuntimeError>;
     fn unsubscribe_keyboard(&mut self);

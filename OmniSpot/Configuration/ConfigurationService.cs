@@ -2,7 +2,6 @@ using LiteDB;
 using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration.Storage;
 using OmniSpot.Extensions;
-using System.Windows.Input;
 
 namespace OmniSpot.Configuration;
 
@@ -55,20 +54,7 @@ internal class ConfigurationService(LiteDatabase database, ILogger<Configuration
 
     private SettingsDocument SeedDefaults(ILiteCollection<SettingsDocument> collection)
     {
-        var defaults = new SettingsDocument
-        {
-            Id = SettingsDocumentId,
-            Modifier = Key.RightCtrl,
-            Applications = [],
-            PulseBorderEnabled = true,
-            Theme = AppThemeSetting.System,
-            OverlayEnabled = false,
-            OverlayShowDelayMs = 1000,
-            OverlayKeepOpenWhileModifierHeld = true,
-            DynamicModeEnabled = true,
-            SpotlightEnabled = true,
-            SpotlightModifier = Key.LeftAlt
-        };
+        var defaults = SettingsDocument.FromConfiguration(RustConfigurationBackend.GetDefaults(), SettingsDocumentId);
 
         collection.Insert(defaults);
         logger.LogInformation("Default configuration seeded successfully");

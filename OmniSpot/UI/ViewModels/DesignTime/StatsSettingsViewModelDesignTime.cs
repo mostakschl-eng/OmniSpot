@@ -60,7 +60,7 @@ internal class StatsSettingsViewModelDesignTime : StatsSettingsViewModel
 
     private static SessionStats CreateDesignStats()
     {
-        var stats = new SessionStats();
+        var stats = new SessionStats(new RustStatsBackend());
         stats.LoadFrom(new DailyBucketDocument
         {
             Date = DateOnly.FromDateTime(DateTime.Today),

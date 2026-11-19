@@ -118,7 +118,7 @@ fn get_application_window(hwnd: HWND) -> Option<ApplicationWindow> {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FocusedAppWindows {
     pub focused_window: Option<ApplicationWindow>,

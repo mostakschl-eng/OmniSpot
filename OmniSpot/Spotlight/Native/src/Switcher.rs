@@ -10,7 +10,8 @@ use windows::Win32::System::Threading::AttachThreadInput;
 use windows::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_MOUSE};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct AppSwitchResult {
     pub process_id: Option<u32>,
     pub process_path: String,

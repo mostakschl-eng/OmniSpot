@@ -13,17 +13,8 @@ internal class AppNameResolver(IAppRegistryCache appRegistryCache) : IAppNameRes
     {
         var displayName = appRegistryCache.GetDisplayName(processName, processPath);
 
-        if (string.IsNullOrEmpty(displayName))
-        {
-            return null;
-        }
-
-        var firstChar = char.ToUpperInvariant(displayName[0]);
-        if (firstChar is < 'A' or > 'Z')
-        {
-            return null;
-        }
-
-        return Key.A + (firstChar - 'A');
+        return RustDynamicModeBackend.ResolveDynamicKey(displayName) is { } key
+            ? (System.Windows.Input.Key)key
+            : null;
     }
 }

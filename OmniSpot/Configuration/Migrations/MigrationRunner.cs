@@ -1,5 +1,6 @@
 using LiteDB;
 using Microsoft.Extensions.Logging;
+using OmniSpot;
 using OmniSpot.Configuration.Storage;
 
 namespace OmniSpot.Configuration.Migrations;
@@ -16,9 +17,9 @@ internal class MigrationRunner(
         var collection = db.GetCollection<MigrationRecord>(CollectionName);
         var executedVersions = collection.FindAll().Select(r => r.Version).ToHashSet();
 
-        var pending = migrations
-            .Where(m => !executedVersions.Contains(m.Version))
-            .OrderBy(m => m.Version)
+        var migrationByVersion = migrations.ToDictionary(m => m.Version);
+        var pending = RustMigrationBackend.GetPendingVersions(migrationByVersion.Keys, executedVersions)
+            .Select(version => migrationByVersion[version])
             .ToList();
 
         if (pending.Count == 0)

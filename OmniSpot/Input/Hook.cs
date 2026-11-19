@@ -2,450 +2,191 @@ using KeyboardHookLite;
 using Microsoft.Extensions.Logging;
 using OmniSpot.Extensions;
 using OmniSpot.Overlay;
+using OmniSpot.Configuration;
 using OmniSpot.Spotlight;
 using OmniSpot.Stats;
 using OmniSpot.WindowDiscovery;
-using System.Collections.Frozen;
-using System.Diagnostics;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using AppConfig = OmniSpot.Configuration.Configuration;
 
 namespace OmniSpot.Input;
 
-internal class Hook(
+/// <summary>Managed keyboard and WPF host for the Rust-owned hook engine.</summary>
+internal sealed class Hook(
     ILogger<Hook> logger,
-    Switcher switcher,
-    Peeker peeker,
-    IWindowEnumerator windowEnumerator,
+    RustHookBackend rustHook,
     OverlayShowTimer overlayShowTimer,
     WarningOverlayService warningOverlayService,
     AppOverlayService overlayService,
     IProcessInspector processInspector,
-    DynamicModeService dynamicModeService,
+    IAppNameResolver appNameResolver,
     StatsService statsService,
     SpotlightService spotlightService) : IDisposable
 {
-    private const int SyntheticModifierTapMaxDurationMs = 200;
-
-    private readonly KeyboardHook _hook = new();
-    private readonly KeyStateMachine _stateMachine = new();
-    private AppConfig? _config;
-    private bool? _overlayPreviewEnabled;
-    private readonly HashSet<Key> _suppressedLetterKeys = [];
-    private readonly HashSet<Key> _suppressedDigitKeys = [];
-    private readonly HashSet<Key> _passthroughLetterKeys = [];
-    private long? _previousLetterUpTick;
-
-    // there are apps which run un-elevated will still steal key events
-    private readonly FrozenSet<string> _processesStealingKeyEvents = new[]
-    {
-        "WindowsSandboxRemoteSession.exe", // Windows Sandbox window intercepts key events when active
-    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly KeyboardHook _keyboardHook = new();
+    private bool _started;
 
     public void Start(AppConfig config)
     {
-        _config = config;
-        _stateMachine.Configure(config.Modifier, config.SpotlightModifier, config.SpotlightEnabled);
-        overlayShowTimer.Configure(ShowOverlayIfEnabled, config.OverlayShowDelayMs);
-        logger.LogInformation("Starting hook");
-        _hook.KeyboardPressed += Hook_KeyboardPressed;
-    }
-
-    private void Stop()
-    {
-        logger.LogInformation("Stopping hook");
-        _hook.KeyboardPressed -= Hook_KeyboardPressed;
-    }
-
-    public void Dispose()
-    {
-        Stop();
-        _hook.Dispose();
+        rustHook.RegisterHost(DispatchNativeCallback);
+        rustHook.Start(config);
+        _keyboardHook.KeyboardPressed += OnKeyboardPressed;
+        _started = true;
+        logger.LogInformation("Started keyboard hook with Rust event engine");
     }
 
     public void UpdateConfiguration(AppConfig config)
     {
-        _config = config;
-        _overlayPreviewEnabled = null;
-        _stateMachine.Configure(config.Modifier, config.SpotlightModifier, config.SpotlightEnabled);
-        overlayShowTimer.Configure(ShowOverlayIfEnabled, config.OverlayShowDelayMs);
-        // Reset state when configuration changes (especially if modifier key changes)
-        ResetModifierState();
+        rustHook.UpdateConfiguration(config);
     }
 
-    public void SetOverlayPreviewEnabled(bool enabled)
-    {
-        _overlayPreviewEnabled = enabled;
-        if (!enabled)
-        {
-            overlayShowTimer.Cancel();
-            overlayService.Hide();
-        }
-    }
+    public void SetOverlayPreviewEnabled(bool enabled) => rustHook.SetOverlayPreviewEnabled(enabled);
 
-    private void Hook_KeyboardPressed(object? sender, KeyboardHookEventArgs e)
+    private void OnKeyboardPressed(object? sender, KeyboardHookEventArgs e)
     {
         try
         {
-            ArgumentNullException.ThrowIfNull(_config);
             using var _ = logger.MeasureTime($"Handling key event {e.ToFriendlyString()}");
+            e.SuppressKeyPress = rustHook.Process((uint)e.InputEvent.Key, e.IsKeyDown(), (uint)e.InputEvent.Flags,
+                System.Globalization.CultureInfo.CurrentCulture.Name);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error handling key press in Rust hook");
+        }
+    }
 
-            if (e.IsInjected())
+    private uint DispatchNativeCallback(uint eventId, byte[] payload)
+    {
+        try
+        {
+            switch (eventId)
             {
-                logger.LogDebug("Ignoring injected event for {Event}", e.ToFriendlyString());
-                return;
-            }
-
-            logger.LogDebug("{Event}, ModifierDown: {ModifierDown}", e.ToFriendlyString(), _stateMachine.IsModifierHeld);
-
-            if (e.IsKeyDown())
-            {
-                if (_stateMachine.IsModifierHeld && !KeyboardInput.IsKeyPhysicallyDown(_config.Modifier))
-                {
-                    logger.LogDebug("Modifier {Modifier} is no longer physically held - resetting stuck state before processing {Key}", _config.Modifier, e.InputEvent.Key);
-                    ResetModifierState();
-                }
-
-                HandleKeyDown(e);
-            }
-            else
-            {
-                HandleKeyUp(e);
+                case 1:
+                    var timeout = JsonDocument.Parse(payload).RootElement.GetProperty("timeoutMs").GetInt32();
+                    overlayShowTimer.Configure(rustHook.ShowOverlayIfEnabled, timeout);
+                    return 1;
+                case 2:
+                    overlayShowTimer.Start();
+                    return 1;
+                case 3:
+                    overlayShowTimer.Cancel();
+                    return 1;
+                case 4:
+                    return overlayService.IsVisible ? 1u : 0u;
+                case 5:
+                    var overlay = JsonSerializer.Deserialize<OverlayRequest>(payload, JsonOptions)
+                        ?? throw new InvalidOperationException("Rust sent an invalid overlay request.");
+                    overlayService.Show(overlay.Applications.Select(ToApplication).ToArray(), overlay.Dynamic);
+                    return 1;
+                case 6:
+                    overlayService.Hide();
+                    return 1;
+                case 7:
+                    var warning = JsonSerializer.Deserialize<string>(payload, JsonOptions);
+                    warningOverlayService.Show(warning switch
+                    {
+                        "elevated" => WarningContent.Elevated,
+                        "keyEventsStealing" => WarningContent.KeyEventsStealing,
+                        _ => throw new InvalidOperationException($"Unknown Rust hook warning '{warning}'.")
+                    });
+                    return 1;
+                case 8:
+                    spotlightService.Toggle();
+                    return 1;
+                case 9:
+                    EnqueueStats(payload);
+                    return 1;
+                case 10:
+                    MonitorPotentialElevation(JsonSerializer.Deserialize<string>(payload, JsonOptions)
+                        ?? throw new InvalidOperationException("Rust sent an empty process path."));
+                    return 1;
+                case 11:
+                    logger.LogError("Rust hook event failed: {Error}", JsonSerializer.Deserialize<string>(payload, JsonOptions));
+                    return 1;
+                case 12:
+                    var request = JsonSerializer.Deserialize<ResolveKeyRequest>(payload, JsonOptions)
+                        ?? throw new InvalidOperationException("Rust sent an invalid dynamic-key request.");
+                    return appNameResolver.GetDynamicKey(request.ProcessName, request.ProcessPath) is { } key
+                        ? (uint)key : 0;
+                default:
+                    logger.LogWarning("Rust hook sent unknown host callback {EventId}", eventId);
+                    return 0;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unexpected error handling key press");
+            logger.LogError(ex, "Failed to dispatch Rust hook callback {EventId}", eventId);
+            return 0;
         }
     }
 
-    private void HandleKeyDown(KeyboardHookEventArgs e)
+    private void EnqueueStats(byte[] payload)
     {
-        ArgumentNullException.ThrowIfNull(_config);
-
-        switch (_stateMachine.ProcessKeyDown(e.InputEvent.Key))
+        using var document = JsonDocument.Parse(payload);
+        var root = document.RootElement;
+        switch (root.GetProperty("kind").GetString())
         {
-            case KeyTransition.ModifierPressed t:
-                if (t.HasSideEffect)
-                {
-                    SuppressModifier(e);
-                }
-
-                if (t.IsFirstPress && IsOverlayEnabled)
-                {
-                    overlayShowTimer.Start();
-                }
-
+            case "switch":
+                statsService.Enqueue(new SwitchEvent(
+                    root.GetProperty("processName").GetString()!,
+                    root.GetProperty("processId").ValueKind == JsonValueKind.Null ? null : root.GetProperty("processId").GetUInt32(),
+                    root.GetProperty("processPath").GetString()!,
+                    root.GetProperty("totalChoices").GetInt32(),
+                    root.GetProperty("modifierDownTick").GetInt64(),
+                    root.GetProperty("letterDownTick").GetInt64(),
+                    root.GetProperty("previousLetterUpTick").ValueKind == JsonValueKind.Null ? null : root.GetProperty("previousLetterUpTick").GetInt64(),
+                    root.GetProperty("isDynamic").GetBoolean(),
+                    (Key)root.GetProperty("triggerKey").GetUInt32()));
                 break;
-            case KeyTransition.LetterKeyPressed { Key: var letter }:
-                if (!KeyboardInput.IsKeyPhysicallyDown(_config.Modifier))
-                {
-                    logger.LogWarning("Letter {Letter} received while modifier {Modifier} is not physically held. Resetting state.", letter, _config.Modifier);
-                    ResetModifierState();
-                    break;
-                }
-                HandleLetterPressed(e, letter);
+            case "peek":
+                statsService.Enqueue(new PeekEvent(
+                    root.GetProperty("targetProcessName").GetString()!,
+                    root.GetProperty("targetProcessPath").GetString()!,
+                    root.GetProperty("armTick").GetInt64(),
+                    root.GetProperty("finishTick").GetInt64(),
+                    root.GetProperty("isDynamic").GetBoolean()));
                 break;
-            case KeyTransition.DigitKeyPressed { Key: var digit }:
-                if (!KeyboardInput.IsKeyPhysicallyDown(_config.Modifier))
-                {
-                    logger.LogWarning("Digit {Digit} received while modifier {Modifier} is not physically held. Resetting state.", digit, _config.Modifier);
-                    ResetModifierState();
-                    break;
-                }
-                HandleDigitPressed(e, digit);
+            case "altTab":
+                statsService.Enqueue(new AltTabEvent(root.GetProperty("navCount").GetInt32()));
                 break;
-            case KeyTransition.SpotlightShortcutPressed:
-                if (!KeyboardInput.IsKeyPhysicallyDown(_config.SpotlightModifier))
-                {
-                    logger.LogWarning("Spotlight shortcut received but modifier {Modifier} is not physically held. Resetting state.", _config.SpotlightModifier);
-                    ResetModifierState();
-                    break;
-                }
-                e.SuppressKeyPress = true;
-                spotlightService.Toggle();
-                break;
-            case KeyTransition.AltTabSwitched altTab:
-                // this handles Right Alt when switch is triggered by Enter
-                statsService.Enqueue(new AltTabEvent(altTab.NavCount));
-                break;
-            case KeyTransition.UnrelatedKeyReset:
-                logger.LogDebug("Unrelated key {Key} pressed while modifier down - resetting state", e.InputEvent.Key);
-                ResetModifierState();
-                break;
+            default:
+                throw new InvalidOperationException("Rust sent an unknown stats event.");
         }
     }
 
-    private void HandleKeyUp(KeyboardHookEventArgs e)
-    {
-        var letterWasSuppressed = _suppressedLetterKeys.Remove(e.InputEvent.Key);
-        var digitWasSuppressed = _suppressedDigitKeys.Remove(e.InputEvent.Key);
-        var letterWasPassthrough = _passthroughLetterKeys.Remove(e.InputEvent.Key);
-
-        if (letterWasSuppressed || digitWasSuppressed)
-        {
-            e.SuppressKeyPress = true;
-            logger.LogDebug("Suppressing key up for previously suppressed {Key}", e.InputEvent.Key);
-            if (_stateMachine.IsModifierHeld)
-            {
-                _previousLetterUpTick = Stopwatch.GetTimestamp();
-            }
-            FinishPeek();
-            return;
-        }
-
-        if (letterWasPassthrough)
-        {
-            e.SuppressKeyPress = true;
-            var result = KeyboardInput.SendSyntheticCombination(_config!.Modifier, e.InputEvent.Key);
-            logger.LogDebug(
-                "No binding for {Modifier}+{Key} - sent synthetic combination, success: {Result}",
-                _config.Modifier, e.InputEvent.Key, result);
-            return;
-        }
-
-        var wasOverlayVisible = overlayService.IsVisible;
-        switch (_stateMachine.ProcessKeyUp(e.InputEvent.Key))
-        {
-            case KeyTransition.ModifierReleasedClean t:
-                overlayShowTimer.Cancel();
-                overlayService.Hide();
-                _previousLetterUpTick = null;
-                if (t.HasSideEffect)
-                {
-                    SuppressModifier(e);
-
-                    if (!wasOverlayVisible)
-                    {
-                        if (t.HeldDurationMs <= SyntheticModifierTapMaxDurationMs)
-                        {
-                            var result = KeyboardInput.SendSyntheticKeyDownUp(e.InputEvent.Key);
-                            logger.LogDebug(
-                                "Sent synthetic key for modifier {Key}, press duration {Duration}ms, success: {Result}",
-                                e.InputEvent.Key, t.HeldDurationMs, result);
-                        }
-                        else
-                        {
-                            logger.LogDebug(
-                                "Skipped synthetic key for modifier {Key} - press duration {Duration}ms exceeded threshold",
-                                e.InputEvent.Key, t.HeldDurationMs);
-                        }
-                    }
-                }
-
-                break;
-
-            case KeyTransition.ModifierReleasedAfterAction t:
-                overlayShowTimer.Cancel();
-                overlayService.Hide();
-                _previousLetterUpTick = null;
-                if (t.HasSideEffect)
-                {
-                    SuppressModifier(e);
-                }
-                FinishPeek();
-                break;
-
-            case KeyTransition.AltTabSwitched altTab:
-                // this handles Left Alt when switch is triggered by releasing Alt
-                statsService.Enqueue(new AltTabEvent(altTab.NavCount));
-                break;
-        }
-    }
-
-    private void SuppressModifier(KeyboardHookEventArgs e)
-    {
-        e.SuppressKeyPress = true;
-        logger.LogDebug("Modifier key {Key} with side effects - suppressing", e.InputEvent.Key);
-    }
-
-    private void HandleLetterPressed(KeyboardHookEventArgs e, Key letter)
-    {
-        ArgumentNullException.ThrowIfNull(_config);
-
-        var matchingApps = _config.Applications.Where(a => a.Key == letter).ToList();
-        var isDynamic = false;
-
-        if (matchingApps.Count == 0 && _config.DynamicModeEnabled)
-        {
-            matchingApps = [.. dynamicModeService.GetAppsForKey(letter, _config.Applications)];
-            isDynamic = true;
-        }
-
-        if (matchingApps.Count > 0)
-        {
-            e.SuppressKeyPress = true;
-            if (_suppressedLetterKeys.Add(letter))
-            {
-                logger.LogDebug("{Modifier} + {Letter} detected", _config.Modifier, letter);
-                var letterDownTick = Stopwatch.GetTimestamp();
-                var currentWindow = windowEnumerator.GetCurrentWindow();
-                var result = switcher.Execute(matchingApps);
-                var isAppStealingKeyEvents = result != null && _processesStealingKeyEvents.Contains(result.ProcessName);
-
-                if (_config.StatsEnabled && result is { WasStarted: false })
-                {
-                    statsService.Enqueue(new SwitchEvent(
-                        ProcessName: result.ProcessName,
-                        ProcessId: result.ProcessId,
-                        ProcessPath: result.ProcessPath,
-                        TotalChoices: windowEnumerator.GetTotalChoicesCount(),
-                        ModifierDownTick: _stateMachine.ModifierPressedAtTick,
-                        LetterDownTick: letterDownTick,
-                        PreviousLetterUpTick: _previousLetterUpTick,
-                        IsDynamic: isDynamic,
-                        TriggerKey: letter));
-                }
-
-                if (_config.PeekEnabled && result?.WasStarted == false && currentWindow is not null &&
-                    currentWindow.ProcessId != result.ProcessId && !isAppStealingKeyEvents)
-                {
-                    peeker.Arm(currentWindow, result, isDynamic);
-                    if (!overlayService.IsVisible)
-                    {
-                        // do not show overlay if peek mode is arming
-                        overlayShowTimer.Cancel();
-                    }
-                }
-
-                if (result is { NeedsElevation: true })
-                {
-                    // switching to elevated app so need to reset the state to avoid ghost modifier side effect
-                    ResetModifierState();
-                    warningOverlayService.Show(WarningContent.Elevated);
-                }
-                else if (isAppStealingKeyEvents)
-                {
-                    ResetModifierState();
-                    warningOverlayService.Show(WarningContent.KeyEventsStealing);
-                }
-                else
-                {
-                    RefreshOrHideOverlay();
-                    if (result?.WasStarted == true)
-                    {
-                        MonitorPotentialElevation(result);
-                    }
-                }
-            }
-        }
-        else if (_stateMachine.ConfiguredModifierHasSideEffect)
-        {
-            // Modifier+letter is not bound to any app: suppress the bare letter (which Windows would see
-            // without the modifier) and schedule a synthetic modifier+letter replay on key-up so Windows
-            // receives the correct combination and can act on it (e.g. Win+D → show desktop).
-            e.SuppressKeyPress = true;
-            _passthroughLetterKeys.Add(letter);
-            logger.LogDebug("No binding for {Modifier}+{Letter} - deferring synthetic passthrough to key-up", _config.Modifier, letter);
-        }
-    }
-
-    private void MonitorPotentialElevation(AppSwitchResult result)
+    private void MonitorPotentialElevation(string path)
     {
         _ = Task.Run(async () =>
         {
-            var elevated = await processInspector.WaitForPotentialElevation(result.ProcessPath);
-            if (elevated)
+            if (await processInspector.WaitForPotentialElevation(path))
             {
-                logger.LogDebug("Newly started process {ProcessPath} is elevated, showing warning", result.ProcessPath);
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    ResetModifierState();
-                    warningOverlayService.Show(WarningContent.Elevated);
-                });
+                logger.LogDebug("Newly started process {ProcessPath} is elevated, showing warning", path);
+                Application.Current.Dispatcher.Invoke(rustHook.PotentialElevationDetected);
             }
         });
     }
 
-    private void HandleDigitPressed(KeyboardHookEventArgs e, Key digit)
+    private static ApplicationConfiguration ToApplication(NativeApplication app) => new(
+        (Key)app.Key, app.ProcessPath, Enum.Parse<CycleMode>(app.CycleMode), app.StartIfNotRunning,
+        Enum.Parse<ApplicationType>(app.ApplicationType), app.Aumid);
+
+    public void Dispose()
     {
-        ArgumentNullException.ThrowIfNull(_config);
-
-        var digitDownTick = Stopwatch.GetTimestamp();
-        var index = DigitKeyToIndex(digit);
-        if (switcher.SwitchToWindowByIndex(_config.Applications, index, out var window))
+        if (_started)
         {
-            e.SuppressKeyPress = true;
-            _suppressedDigitKeys.Add(digit);
-
-            if (_config.StatsEnabled && window is not null)
-            {
-                statsService.Enqueue(new SwitchEvent(
-                    ProcessName: window.ProcessName,
-                    ProcessId: window.ProcessId,
-                    ProcessPath: window.ProcessImagePath,
-                    TotalChoices: windowEnumerator.GetTotalChoicesCount(),
-                    ModifierDownTick: _stateMachine.ModifierPressedAtTick,
-                    LetterDownTick: digitDownTick,
-                    PreviousLetterUpTick: _previousLetterUpTick,
-                    IsDynamic: false,
-                    TriggerKey: digit));
-            }
-
-            logger.LogDebug("{Modifier} + {Digit} detected, switched to window #{Number}", _config.Modifier, digit, index + 1);
-            RefreshOrHideOverlay();
+            _keyboardHook.KeyboardPressed -= OnKeyboardPressed;
+            rustHook.Stop();
+            _started = false;
         }
+        _keyboardHook.Dispose();
     }
 
-    private void FinishPeek()
-    {
-        if (peeker.TryFinish(out var peekResult))
-        {
-            if (_config?.StatsEnabled == true)
-            {
-                statsService.Enqueue(new PeekEvent(
-                    TargetProcessName: peekResult.TargetProcessName,
-                    TargetProcessPath: peekResult.TargetProcessPath,
-                    ArmTick: peekResult.ArmedAtTick,
-                    FinishTick: Stopwatch.GetTimestamp(),
-                    IsDynamic: peekResult.IsDynamic));
-            }
-
-            switcher.ActivateWindow(peekResult.PreviousWindow, pulseBorder: false);
-            if (peekResult.TargetWasMinimized)
-            {
-                switcher.HideWindow(peekResult.TargetHandle);
-            }
-        }
-    }
-
-    private void RefreshOrHideOverlay()
-    {
-        ArgumentNullException.ThrowIfNull(_config);
-
-        if (IsOverlayEnabled && _config.OverlayKeepOpenWhileModifierHeld && overlayService.IsVisible)
-        {
-            overlayService.Show(_config.Applications, _config.DynamicModeEnabled);
-        }
-        else
-        {
-            overlayService.Hide();
-        }
-    }
-
-    private void ShowOverlayIfEnabled()
-    {
-        if (IsOverlayEnabled && _config is { } config && _stateMachine.IsModifierHeld)
-        {
-            overlayService.Show(config.Applications, config.DynamicModeEnabled);
-        }
-    }
-
-    private bool IsOverlayEnabled => (_overlayPreviewEnabled ?? _config?.OverlayEnabled) == true;
-
-    // Inverse of AppOverlayService.IndexToKey: D1→0, D2→1, …, D9→8, D0→9
-    private static int DigitKeyToIndex(Key key) => key == Key.D0 ? 9 : key - Key.D1;
-
-    private void ResetModifierState()
-    {
-        _stateMachine.Reset();
-        _suppressedLetterKeys.Clear();
-        _suppressedDigitKeys.Clear();
-        _passthroughLetterKeys.Clear();
-        _previousLetterUpTick = null;
-        peeker.Cancel();
-        overlayShowTimer.Cancel();
-        overlayService.Hide();
-    }
+    private sealed record ResolveKeyRequest(string ProcessName, string ProcessPath);
+    private sealed record OverlayRequest(NativeApplication[] Applications, bool Dynamic);
+    private sealed record NativeApplication(uint Key, string ProcessPath, string CycleMode,
+        bool StartIfNotRunning, string ApplicationType, string? Aumid);
 }

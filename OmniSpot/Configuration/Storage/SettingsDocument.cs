@@ -10,9 +10,12 @@ internal class SettingsDocument
     [BsonId]
     public int Id { get; set; }
 
+    // Retained for LiteDB compatibility with older settings records.
+    public int? ModifierIdleTimeoutMs { get; init; }
+
     public Key Modifier { get; init; }
 
-    public List<ApplicationConfigurationDocument> Applications { get; init; } = [];
+    public List<ApplicationConfigurationDocument> Applications { get; set; } = [];
 
     public bool PulseBorderEnabled { get; init; }
 

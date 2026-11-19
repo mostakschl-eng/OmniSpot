@@ -10,28 +10,27 @@ internal class ConfigurationManager(
     PackagedAppPathSanitizer pathSanitizer,
     ILogger<ConfigurationManager> logger)
 {
-    private Configuration? _currentConfiguration;
-    private bool _migrationsRun;
-
     public event Action<Configuration>? ConfigurationChanged;
 
     public Configuration? GetConfiguration()
     {
-        if (!_migrationsRun)
+        if (!RustConfigurationBackend.MigrationsRun)
         {
             if (!migrationRunner.RunPending())
             {
                 return null;
             }
-            _migrationsRun = true;
+            RustConfigurationBackend.MarkMigrationsRun();
         }
 
-        if (_currentConfiguration is null)
+        var current = RustConfigurationBackend.GetCurrent();
+        if (current is null)
         {
             LoadConfiguration();
+            current = RustConfigurationBackend.GetCurrent();
         }
 
-        return _currentConfiguration;
+        return current;
     }
 
     public bool UpdateConfiguration(Configuration newConfig)
@@ -39,7 +38,7 @@ internal class ConfigurationManager(
         try
         {
             configService.WriteConfiguration(newConfig);
-            _currentConfiguration = newConfig;
+            RustConfigurationBackend.SetCurrent(newConfig);
             logger.LogInformation("Configuration updated successfully");
             ConfigurationChanged?.Invoke(newConfig);
             return true;
@@ -66,7 +65,7 @@ internal class ConfigurationManager(
 
             configValidator.ValidateAndLog(config);
 
-            _currentConfiguration = config;
+            RustConfigurationBackend.SetCurrent(config);
             logger.LogInformation("Configuration loaded successfully");
             ConfigurationChanged?.Invoke(config);
         }

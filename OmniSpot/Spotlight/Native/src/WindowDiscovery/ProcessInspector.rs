@@ -14,7 +14,7 @@ use windows::Win32::UI::Shell::{
     AssocQueryStringW, ASSOCF_OPEN_BYEXENAME, ASSOCSTR_FRIENDLYAPPNAME,
 };
 
-pub(super) fn needs_elevation(process_id: u32) -> bool {
+pub(crate) fn needs_elevation(process_id: u32) -> bool {
     match unsafe { OpenProcess(PROCESS_QUERY_INFORMATION, false, process_id) } {
         Ok(handle) => {
             drop(OwnedHandle(handle));
@@ -33,7 +33,7 @@ pub(super) fn needs_elevation(process_id: u32) -> bool {
     }
 }
 
-pub(super) fn wait_for_potential_elevation(path: &str, timeout_ms: i32) -> Result<bool, String> {
+pub(crate) fn wait_for_potential_elevation(path: &str, timeout_ms: i32) -> Result<bool, String> {
     let process_name = file_stem(path);
     let start = Instant::now();
     while start.elapsed().as_millis() < timeout_ms.max(0) as u128 {
@@ -65,13 +65,13 @@ pub(super) fn wait_for_potential_elevation(path: &str, timeout_ms: i32) -> Resul
     Ok(false)
 }
 
-pub(super) fn is_windows_executable(path: &str) -> bool {
+pub(crate) fn is_windows_executable(path: &str) -> bool {
     let path = wide(path);
     let mut kind = 0;
     unsafe { GetBinaryTypeW(PCWSTR(path.as_ptr()), &mut kind).is_ok() && matches!(kind, 0 | 6) }
 }
 
-pub(super) fn get_process_display_name(path: &str) -> String {
+pub(crate) fn get_process_display_name(path: &str) -> String {
     let wide_path = wide(path);
     let mut length = 260;
     let mut buffer = [0u16; 260];

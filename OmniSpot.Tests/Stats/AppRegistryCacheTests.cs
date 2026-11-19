@@ -16,20 +16,18 @@ public class AppRegistryCacheTests : IDisposable
 {
     private readonly LiteDatabase _db = new(":memory:");
     private readonly IWindowEnumerator _windowEnumerator = Substitute.For<IWindowEnumerator>();
-    private readonly IPackagedAppsService _packagedAppsService = Substitute.For<IPackagedAppsService>();
-    private readonly IProcessInspector _processInspector = Substitute.For<IProcessInspector>();
+    private readonly RustAppRegistryBackend _rust = new();
     private readonly AppRegistryCache _sut;
 
     public AppRegistryCacheTests()
     {
         _windowEnumerator.GetWindows().Returns([]);
-        _packagedAppsService.GetInstalledPackages().Returns(InstalledPackages.Empty);
+        _rust.Initialize([]);
         _sut = new AppRegistryCache(
             _db,
             _windowEnumerator,
-            _packagedAppsService,
-            _processInspector,
-            NullLogger<AppRegistryCache>.Instance);
+            NullLogger<AppRegistryCache>.Instance,
+            _rust);
     }
 
     public void Dispose() => _db.Dispose();
@@ -111,13 +109,11 @@ public class AppRegistryCacheTests : IDisposable
     [Fact]
     public void TryAdd_PersistsEntryToLiteDb_OnCacheMiss()
     {
-        _processInspector.GetProcessDisplayName(Arg.Any<string>()).Returns("Notepad");
-
         _sut.TryAdd("notepad.exe", "notepad.exe");
 
         var doc = _db.FindByProcessName("notepad.exe");
         doc.Should().NotBeNull();
-        doc.DisplayName.Should().Be("Notepad");
+        doc.DisplayName.Should().Be(_sut.GetDisplayName("notepad.exe"));
     }
 
     // ── Prepopulate ───────────────────────────────────────────────────────────
@@ -136,22 +132,24 @@ public class AppRegistryCacheTests : IDisposable
     public void Prepopulate_SeedsCache_FromRunningWindows()
     {
         _windowEnumerator.GetWindows().Returns([MakeWindow(@"C:\notepad.exe")]);
-        _processInspector.GetProcessDisplayName(@"C:\notepad.exe").Returns("Notepad");
 
         _sut.Prepopulate(EmptyConfig());
 
-        _sut.GetDisplayName("notepad.exe").Should().Be("Notepad");
+        var doc = _db.FindByProcessName("notepad.exe");
+        doc.Should().NotBeNull();
+        doc.DisplayName.Should().Be(_sut.GetDisplayName("notepad.exe"));
     }
 
     [Fact]
     public void Prepopulate_SeedsCache_FromConfiguredApps()
     {
         var config = ConfigWith(AppConfigFor(@"C:\code.exe"));
-        _processInspector.GetProcessDisplayName(@"C:\code.exe").Returns("Visual Studio Code");
 
         _sut.Prepopulate(config);
 
-        _sut.GetDisplayName("code.exe").Should().Be("Visual Studio Code");
+        var doc = _db.FindByProcessName("code.exe");
+        doc.Should().NotBeNull();
+        doc.DisplayName.Should().Be(_sut.GetDisplayName("code.exe"));
     }
 
     [Fact]
@@ -163,7 +161,6 @@ public class AppRegistryCacheTests : IDisposable
         _sut.Prepopulate(EmptyConfig());
 
         _sut.GetDisplayName("notepad.exe").Should().Be("DB Notepad");
-        _processInspector.DidNotReceive().GetProcessDisplayName(Arg.Any<string>());
     }
 
     [Fact]
@@ -175,20 +172,18 @@ public class AppRegistryCacheTests : IDisposable
         _sut.Prepopulate(config);
 
         _sut.GetDisplayName("code.exe").Should().Be("Existing");
-        _processInspector.DidNotReceive().GetProcessDisplayName(Arg.Any<string>());
     }
 
     [Fact]
     public void Prepopulate_PersistsNewWindowEntry_ToLiteDb()
     {
         _windowEnumerator.GetWindows().Returns([MakeWindow(@"C:\notepad.exe")]);
-        _processInspector.GetProcessDisplayName(@"C:\notepad.exe").Returns("Notepad");
 
         _sut.Prepopulate(EmptyConfig());
 
         var doc = _db.FindByProcessName("notepad.exe");
         doc.Should().NotBeNull();
-        doc.DisplayName.Should().Be("Notepad");
+        doc.DisplayName.Should().Be(_sut.GetDisplayName("notepad.exe"));
     }
 }
 

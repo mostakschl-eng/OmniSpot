@@ -1,154 +1,49 @@
 using Microsoft.Extensions.Logging;
-using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace OmniSpot.Startup;
 
-internal class AutoStart(ILogger<AutoStart> logger)
+/// <summary>Thin UI-facing adapter for native Rust Startup shortcut operations.</summary>
+internal sealed class AutoStart(ILogger<AutoStart> logger)
 {
-    public bool IsEnabled()
-    {
-        var linkPath = GetLinkPath();
-        return linkPath is not null && File.Exists(linkPath);
-    }
+    private const string LibraryName = "omnispot_spotlight_native";
+
+    public bool IsEnabled() => NativeIsEnabled() != 0;
 
     public bool RemoveShortcut()
     {
-        var linkPath = GetLinkPath();
-        if (linkPath is null)
+        var succeeded = NativeRemove() != 0;
+        if (succeeded)
         {
-            logger.LogError("Cannot determine shortcut path.");
-            return false;
+            logger.LogInformation("Startup shortcut removed");
         }
-
-        try
+        else
         {
-            if (File.Exists(linkPath))
-            {
-                File.Delete(linkPath);
-            }
-
-            logger.LogInformation("Shortcut removed: {LinkPath}", linkPath);
-            return true;
+            logger.LogError("Native Rust code failed to remove the startup shortcut");
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to remove shortcut: {LinkPath}", linkPath);
-            return false;
-        }
+        return succeeded;
     }
 
     public bool CreateShortcut()
     {
-        var executablePath = Environment.ProcessPath;
-        if (executablePath is null)
+        var succeeded = NativeCreate() != 0;
+        if (succeeded)
         {
-            logger.LogError("Cannot get current process executable path.");
-            return false;
+            logger.LogInformation("Startup shortcut created");
         }
-        var originalFileDirectory = Path.GetDirectoryName(executablePath);
-
-        if (string.IsNullOrEmpty(originalFileDirectory))
+        else
         {
-            logger.LogError("Cannot determine working directory from executable path.");
-            return false;
+            logger.LogError("Native Rust code failed to create the startup shortcut");
         }
-
-        var linkPath = GetLinkPath();
-        if (linkPath is null)
-        {
-            logger.LogError("Cannot get current process executable path.");
-            return false;
-        }
-
-        try
-        {
-            // Create ShellLink instance
-            // ReSharper disable once SuspiciousTypeConversion.Global
-            var shellLink = (IShellLinkW)new ShellLink();
-
-            // Set target path and working directory
-            shellLink.SetPath(executablePath);
-            shellLink.SetWorkingDirectory(originalFileDirectory);
-
-            // Save the shortcut
-            // ReSharper disable once SuspiciousTypeConversion.Global
-            var persistFile = (IPersistFile)shellLink;
-            persistFile.Save(linkPath, true);
-
-            // Release COM objects
-            Marshal.ReleaseComObject(persistFile);
-            Marshal.ReleaseComObject(shellLink);
-
-            logger.LogInformation("Shortcut created successfully at: {LinkPath}", linkPath);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to create shortcut at: {LinkPath}", linkPath);
-            return false;
-        }
+        return succeeded;
     }
 
-    private static string? GetLinkPath()
-    {
-        var executablePath = Environment.ProcessPath;
-        if (executablePath is null)
-        {
-            return null;
-        }
+    [DllImport(LibraryName, EntryPoint = "omnispot_autostart_is_enabled", CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint NativeIsEnabled();
 
-        var startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-        var fileName = Path.GetFileNameWithoutExtension(executablePath);
-        return Path.Combine(startupPath, fileName + ".lnk");
-    }
-}
+    [DllImport(LibraryName, EntryPoint = "omnispot_autostart_remove", CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint NativeRemove();
 
-
-// Native P/Invoke interfaces for creating Windows shortcuts without COM
-[ComImport]
-[Guid("000214F9-0000-0000-C000-000000000046")]
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-file interface IShellLinkW
-{
-    void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cchMaxPath, IntPtr pfd, uint fFlags);
-    void GetIDList(out IntPtr ppidl);
-    void SetIDList(IntPtr pidl);
-    void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cchMaxName);
-    void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
-    void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cchMaxPath);
-    void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
-    void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cchMaxPath);
-    void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
-    void GetHotkey(out short pwHotkey);
-    void SetHotkey(short wHotkey);
-    void GetShowCmd(out int piShowCmd);
-    void SetShowCmd(int iShowCmd);
-    void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cchIconPath, out int piIcon);
-    void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
-    void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
-    void Resolve(IntPtr hwnd, uint fFlags);
-    void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
-}
-
-[ComImport]
-[Guid("0000010b-0000-0000-C000-000000000046")]
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-file interface IPersistFile
-{
-    void GetClassID(out Guid pClassID);
-    [PreserveSig]
-    int IsDirty();
-    void Load([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
-    void Save([MarshalAs(UnmanagedType.LPWStr)] string? pszFileName, [MarshalAs(UnmanagedType.Bool)] bool fRemember);
-    void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string pszFileName);
-    void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string ppszFileName);
-}
-
-[ComImport]
-[Guid("00021401-0000-0000-C000-000000000046")]
-[ClassInterface(ClassInterfaceType.None)]
-file class ShellLink
-{
+    [DllImport(LibraryName, EntryPoint = "omnispot_autostart_create", CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint NativeCreate();
 }

@@ -1,5 +1,6 @@
 using LiteDB;
 using OmniSpot.Stats.Storage;
+using OmniSpot;
 
 namespace OmniSpot.Stats.Migrations;
 
@@ -14,6 +15,10 @@ internal class RemoveDefaultDateBucketMigration : IStatsMigration
     public void Up(ILiteDatabase db)
     {
         var col = db.GetCollection(DailyBucketDocument.CollectionName);
-        col.Delete(new BsonValue(default(DateOnly).ToString("yyyy-MM-dd")));
+        var key = default(DateOnly).ToString("yyyy-MM-dd");
+        if (RustMigrationBackend.IsDefaultStatsBucketKey(key))
+        {
+            col.Delete(new BsonValue(key));
+        }
     }
 }

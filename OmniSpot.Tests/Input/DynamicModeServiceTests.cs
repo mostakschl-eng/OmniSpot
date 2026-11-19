@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using System.Windows.Input;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -35,7 +34,7 @@ public class DynamicModeServiceTests
         _appNameResolver.GetDynamicKey(Path.GetFileName(PowerpointPath), PowerpointPath).Returns(Key.P);
         _appNameResolver.GetDynamicKey(Path.GetFileName(TerminalPath), TerminalPath).Returns(Key.T);
         _appNameResolver.GetDynamicKey(Path.GetFileName(SlackPath), SlackPath).Returns(Key.S);
-        _sut = new DynamicModeService(_windowEnumerator, _appNameResolver, NullLogger<DynamicModeService>.Instance, _packagedAppsService);
+        _sut = new DynamicModeService(_windowEnumerator, _appNameResolver, _packagedAppsService);
     }
 
     [Fact]

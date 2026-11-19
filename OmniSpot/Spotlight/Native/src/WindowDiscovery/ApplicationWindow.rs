@@ -27,4 +27,8 @@ impl ApplicationWindow {
             && self.style_ex & WS_EX_TOOLWINDOW == 0
             && !self.is_cloaked
     }
+
+    pub fn process_name(&self) -> &str {
+        crate::runtime::file_name(&self.process_image_path)
+    }
 }

@@ -2,7 +2,7 @@ use super::application_window::ApplicationWindow;
 use super::window_enumerator::FocusedAppWindows;
 use crate::configuration::configuration::ApplicationConfiguration;
 
-pub(crate) trait IWindowEnumerator {
+pub(crate) trait IWindowEnumerator: Send + Sync {
     fn get_windows(&self) -> Vec<ApplicationWindow>;
     fn get_cached_windows(&mut self) -> Vec<ApplicationWindow>;
     fn get_current_window(&self) -> Option<ApplicationWindow>;

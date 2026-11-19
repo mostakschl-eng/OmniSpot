@@ -119,6 +119,14 @@ internal sealed class RustSearchBackend
         }, cancellationToken);
     }
 
+    public bool LaunchTarget(SearchResult result)
+    {
+        if (!IsAvailable) return false;
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+            new RustSpotlightLaunchRequest(result.Target, result.Type.ToString()), JsonOptions));
+        return NativeLaunchTarget(bytes, (UIntPtr)bytes.Length) != 0;
+    }
+
     public async Task<IReadOnlyList<SearchResult>> SearchIndexedAsync(
         string query,
         int maxResults,
@@ -197,6 +205,9 @@ internal sealed class RustSearchBackend
     [DllImport(LibraryName, EntryPoint = "omnispot_spotlight_record_launch", CallingConvention = CallingConvention.Cdecl)]
     private static extern uint NativeRecordLaunch(byte[] request, UIntPtr requestLength);
 
+    [DllImport(LibraryName, EntryPoint = "omnispot_spotlight_launch_target", CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint NativeLaunchTarget(byte[] request, UIntPtr requestLength);
+
     private sealed record RustAppItem(string Title, string Target, string AlternateName, int BaseScore);
 
     private sealed record RustIndexConfig(string[] Roots, string PersistencePath, RustAppItem[]? ExtraApps = null);
@@ -211,4 +222,5 @@ internal sealed class RustSearchBackend
         int Score);
 
     private sealed record RustRecordLaunchRequest(string Target, string PersistencePath);
+    private sealed record RustSpotlightLaunchRequest(string Target, string ResultType);
 }

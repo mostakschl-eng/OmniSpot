@@ -22,6 +22,12 @@ pub(crate) use matcher::rank_candidates;
 #[path = "Configuration/mod.rs"]
 mod configuration;
 #[allow(dead_code)]
+#[path = "CLI/mod.rs"]
+mod cli;
+#[allow(dead_code)]
+#[path = "Startup/mod.rs"]
+mod startup;
+#[allow(dead_code)]
 #[path = "Runtime.rs"]
 mod runtime;
 #[allow(dead_code)]

@@ -6,14 +6,14 @@ use std::collections::HashSet;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct RunningApplicationInfo {
+pub(crate) struct RunningApplicationInfo {
     pub process_id: u32,
     pub process_name: String,
     pub process_image_path: String,
     pub is_packaged_app: bool,
 }
 
-pub(super) fn get_running_applications(
+pub(crate) fn get_running_applications(
     windows: &[ApplicationWindow],
     excluded: &[String],
     packages: &[String],

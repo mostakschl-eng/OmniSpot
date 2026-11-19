@@ -19,12 +19,6 @@ internal record ApplicationWindow(
     bool IsCloaked,
     bool NeedsElevation)
 {
-    public bool IsValidWindow =>
-        Size != Size.Empty && !string.IsNullOrEmpty(Title) &&
-        !StyleEx.HasFlag(WindowStyleEx.WS_EX_NOACTIVATE) &&
-        !StyleEx.HasFlag(WindowStyleEx.WS_EX_TOOLWINDOW) &&
-        !IsCloaked;
-
     public string ProcessName => Path.GetFileName(ProcessImagePath);
 
     public string? GetProductName() => FileVersionInfo.GetVersionInfo(ProcessImagePath).ProductName;

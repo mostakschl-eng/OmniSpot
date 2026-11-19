@@ -2,8 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OmniSpot.Spotlight;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.IO;
 
 namespace OmniSpot.UI.ViewModels;
 
@@ -171,24 +169,7 @@ internal partial class SpotlightViewModel : ObservableObject
     {
         try
         {
-            if (item.Type == SearchResultType.App && item.Target.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase))
-            {
-                Process.Start(new ProcessStartInfo { FileName = item.Target, UseShellExecute = true });
-            }
-            else if (item.Type == SearchResultType.App && !item.Target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !File.Exists(item.Target))
-            {
-                Process.Start("explorer.exe", $"shell:AppsFolder\\{item.Target}");
-            }
-            else
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = item.Target,
-                    UseShellExecute = true
-                });
-            }
-
-            _searchService.RecordLaunch(item);
+            if (_searchService.Launch(item)) _searchService.RecordLaunch(item);
         }
         catch
         {

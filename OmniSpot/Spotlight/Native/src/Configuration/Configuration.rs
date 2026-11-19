@@ -1,14 +1,16 @@
 use super::app_theme_setting::AppThemeSetting;
 use super::application_type::ApplicationType;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum CycleMode {
     NextApp,
     Hide,
     NextWindow,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct Configuration {
     // WPF Key values are data here; keyboard conversion is a separate source-file port.
     pub modifier: u32,
@@ -26,7 +28,28 @@ pub(crate) struct Configuration {
     pub spotlight_custom_directories: Option<Vec<String>>,
 }
 
-#[derive(Clone, Debug)]
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            modifier: crate::input::keyboard_input::RIGHT_CTRL,
+            applications: Vec::new(),
+            pulse_border_enabled: true,
+            theme: AppThemeSetting::System,
+            overlay_enabled: false,
+            overlay_show_delay_ms: 1000,
+            overlay_keep_open_while_modifier_held: true,
+            peek_enabled: false,
+            dynamic_mode_enabled: true,
+            stats_enabled: false,
+            spotlight_enabled: true,
+            spotlight_modifier: crate::input::keyboard_input::LEFT_ALT,
+            spotlight_custom_directories: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ApplicationConfiguration {
     pub key: u32,
     pub process_path: String,

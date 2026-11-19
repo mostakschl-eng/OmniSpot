@@ -3,22 +3,17 @@ using OmniSpot.Stats.Storage;
 
 namespace OmniSpot.Stats;
 
-internal class StatsRepository(StatsDbProvider dbProvider, ILogger<StatsRepository> logger)
+internal class StatsRepository(StatsDbProvider dbProvider, RustStatsBackend rustStatsBackend, ILogger<StatsRepository> logger)
 {
-    /// <summary>
-    /// Returns all historical daily buckets, excluding today.
-    /// </summary>
+    /// <summary>Returns historic buckets before today in descending date order.</summary>
     public IReadOnlyList<DailyBucketDocument> GetAllHistoricBuckets()
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
-
         try
         {
             using var db = dbProvider.Get();
-            var col = db.GetCollection<DailyBucketDocument>(DailyBucketDocument.CollectionName);
-            return col.Find(b => b.Date < today)
-                      .OrderByDescending(b => b.Date)
-                      .ToList();
+            var collection = db.GetCollection<DailyBucketDocument>(DailyBucketDocument.CollectionName);
+            return rustStatsBackend.GetHistoricBuckets(collection.FindAll().ToList(), today);
         }
         catch (Exception ex)
         {

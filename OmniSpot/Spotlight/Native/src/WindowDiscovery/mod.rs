@@ -11,13 +11,13 @@ pub(crate) mod installed_packages;
 #[path = "PackagedAppsService.rs"]
 pub(crate) mod packaged_apps_service;
 #[path = "ProcessInspector.rs"]
-mod process_inspector;
+pub(crate) mod process_inspector;
 #[path = "ProcessNameMatcher.rs"]
 pub(crate) mod process_name_matcher;
 #[path = "ProcessPathExtractor.rs"]
 mod process_path_extractor;
 #[path = "RunningApplicationsService.rs"]
-mod running_applications_service;
+pub(crate) mod running_applications_service;
 #[path = "WindowEnumerator.rs"]
 pub(crate) mod window_enumerator;
 #[path = "WindowStyle.rs"]

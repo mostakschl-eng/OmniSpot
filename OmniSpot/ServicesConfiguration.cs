@@ -53,14 +53,13 @@ internal static class ServicesConfiguration
         services.AddImplementationsOf<IMigration>(ServiceLifetime.Transient);
         services.AddSingleton<ConfigurationManager>();
         services.AddSingleton<Hook>();
+        services.AddSingleton<RustHookBackend>();
         services.AddSingleton<DynamicModeService>();
         services.AddSingleton<IAppNameResolver, AppNameResolver>();
-        services.AddSingleton<Peeker>();
         services.AddTransient<Switcher>();
         services.AddTransient<AutoStart>();
         services.AddSingleton<IconExtractor>();
         services.AddTransient<OverlayShowTimer>();
-        services.AddTransient<IProcessPathExtractor, ProcessPathExtractor>();
         services.AddTransient<RunningApplicationsService>();
         services.AddTransient<IPackagedAppsService, PackagedAppsService>();
         services.AddSingleton<IWindowEnumerator, WindowEnumerator>();
@@ -69,8 +68,11 @@ internal static class ServicesConfiguration
         services.AddSingleton<WarningOverlayService>();
         services.AddTransient<IProcessInspector, ProcessInspector>();
 
+        services.AddSingleton<RustStatsBackend>();
+        services.AddSingleton<RustPackagedAppsBackend>();
+        services.AddSingleton<RustProcessInspectorBackend>();
+        services.AddSingleton<RustAppRegistryBackend>();
         services.AddSingleton<SessionStats>();
-        services.AddSingleton<ISessionStats>(sp => sp.GetRequiredService<SessionStats>());
         services.AddSingleton<AppRegistryCache>();
         services.AddSingleton<IAppRegistryCache>(sp => sp.GetRequiredService<AppRegistryCache>());
         services.AddSingleton<StatsService>();

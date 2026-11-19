@@ -15,7 +15,7 @@ impl<C: IAppRegistryCache> IAppNameResolver for AppNameResolver<C> {
     }
 }
 
-pub(super) fn get_dynamic_key(display_name: &str) -> Option<u16> {
+pub(crate) fn get_dynamic_key(display_name: &str) -> Option<u16> {
     let first = char::from_u32(display_name.encode_utf16().next()? as u32)?;
     let first = super::upper_invariant(first) as u32;
     match first {

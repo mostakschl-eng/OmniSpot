@@ -15,77 +15,29 @@ internal class CliHandler(
 {
     public bool Handle(string[] args)
     {
-        if (args.Length == 0)
+        var parsed = RustCliParser.Parse(args, builder);
+        foreach (var flag in parsed.MatchedFlags)
         {
-            return false;
+            var option = builder.FlagOptions.FirstOrDefault(o => o.Name == flag);
+            if (option is not null) option.Handler(options);
+        }
+        foreach (var pair in parsed.ValuedValues)
+        {
+            if (pair.Length == 2 && builder.ValuedOptions.FirstOrDefault(o => o.Name == pair[0]) is { } option)
+                option.Handler(options, pair[1]);
         }
 
-        var matchedCommands = new List<CliBuilder.CommandRegistration>();
-        var i = 0;
-
-        while (i < args.Length)
+        if (parsed.Status == "help")
         {
-            var arg = args[i];
-            logger.LogDebug("Processing argument: {Arg}", arg);
-
-            if (arg == "--help")
-            {
-                ShowHelp();
-                return true;
-            }
-
-            var flagOption = builder.FlagOptions.FirstOrDefault(o => o.Name == arg);
-            if (flagOption != null)
-            {
-                logger.LogDebug("Matched flag option: {Name}", flagOption.Name);
-                flagOption.Handler(options);
-                i++;
-                continue;
-            }
-
-            var valuedOption = builder.ValuedOptions.FirstOrDefault(o => o.Name == arg);
-            if (valuedOption != null)
-            {
-                if (i + 1 >= args.Length)
-                {
-                    new MessageBox
-                    {
-                        Title = "OmniSpot",
-                        Content = $"Option {arg} requires a value.",
-                        CloseButtonIcon = new SymbolIcon(SymbolRegular.ErrorCircle24),
-                        CloseButtonText = "OK",
-                        CloseButtonAppearance = ControlAppearance.Danger,
-                    }.ShowSync();
-                    return true;
-                }
-
-                var value = args[i + 1];
-                logger.LogDebug("Matched valued option: {Name} = {Value}", valuedOption.Name, value);
-                valuedOption.Handler(options, value);
-                i += 2;
-                continue;
-            }
-
-            var command = builder.Commands.FirstOrDefault(c => c.Name == arg);
-            if (command != null)
-            {
-                logger.LogDebug("Matched command: {Name}", command.Name);
-                matchedCommands.Add(command);
-                i++;
-                continue;
-            }
-
-            logger.LogWarning("Unknown argument: {Arg}", arg);
-            i++;
+            ShowHelp();
+            return true;
         }
-
-        if (matchedCommands.Count > 1)
+        if (parsed.Status == "error")
         {
-            var commandNames = string.Join(", ", matchedCommands.Select(c => c.Name));
             new MessageBox
             {
                 Title = "OmniSpot",
-                Content = $"Multiple commands specified: {commandNames}\nOnly one command is allowed at a time.",
+                Content = parsed.Error,
                 CloseButtonIcon = new SymbolIcon(SymbolRegular.ErrorCircle24),
                 CloseButtonText = "OK",
                 CloseButtonAppearance = ControlAppearance.Danger,
@@ -93,15 +45,15 @@ internal class CliHandler(
             return true;
         }
 
-        if (matchedCommands.Count == 1)
+        if (parsed.Status == "command" && parsed.Command is { } commandName)
         {
-            var command = matchedCommands[0];
+            var command = builder.Commands.First(c => c.Name == commandName);
             logger.LogDebug("Executing command: {Name}", command.Name);
             command.Handler(serviceProvider);
             return true;
         }
 
-        // No commands executed, options applied (or unknown args)
+        // No command executed; Rust applied the options and ignored unknown arguments.
         return false;
     }
 

@@ -5,6 +5,7 @@ namespace OmniSpot.Stats.Migrations;
 
 internal class DateTimeToDateOnlyMigration(TimeProvider timeProvider) : IStatsMigration
 {
+    private readonly RustStatsBackend _rust = new();
     public int Version => 1;
 
     public void Up(ILiteDatabase db)
@@ -22,11 +23,10 @@ internal class DateTimeToDateOnlyMigration(TimeProvider timeProvider) : IStatsMi
                 continue;
             }
 
-            // LiteDB reads DateTime as local time, but we want to interpret it as UTC
-            var dt = DateTime.SpecifyKind(oldId.AsDateTime.ToUniversalTime(), DateTimeKind.Utc);
-            // manually convert UTC -> Local using provided zone so that it works in production and in local/CI tests
-            var localDate = TimeZoneInfo.ConvertTimeFromUtc(dt, zone).Date;
-            var newId = new BsonValue(DateOnly.FromDateTime(localDate).ToString("yyyy-MM-dd"));
+            // LiteDB reads DateTime as local time; the stored instant is interpreted as UTC.
+            var utc = oldId.AsDateTime.ToUniversalTime();
+            var dateKey = _rust.GetLocalDateKey(utc, zone);
+            var newId = new BsonValue(dateKey);
 
             doc["_id"] = newId;
 

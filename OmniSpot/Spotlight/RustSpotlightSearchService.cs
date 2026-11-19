@@ -37,6 +37,8 @@ internal sealed class RustSpotlightSearchService(
         }
     }
 
+    public bool Launch(SearchResult result) => backend.LaunchTarget(result);
+
     private IReadOnlyList<SearchResult> EnrichWithIcons(IReadOnlyList<SearchResult> results)
     {
         if (results.Count == 0)

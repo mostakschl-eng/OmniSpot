@@ -1,5 +1,4 @@
 using OmniSpot.Stats;
-using System.IO;
 using System.Windows.Media;
 
 namespace OmniSpot.WindowDiscovery;
@@ -15,32 +14,22 @@ internal class RunningApplicationsService(
     public IReadOnlyList<RunningApplicationInfo> GetRunningApplications(IEnumerable<string> excludedProcessNames,
         bool includeIcons = true)
     {
-        var excluded = excludedProcessNames
-            .Select(n => Path.GetFileName(n).ToLowerInvariant())
-            .Concat(["omnispot.exe"])
-            .ToHashSet();
-
         var installedPackages = packagedAppsService.GetInstalledPackages();
-
-        return windowEnumerator.GetWindows()
-            .Select(w => (Name: Path.GetFileName(w.ProcessImagePath), Path: w.ProcessImagePath, Id: w.ProcessId))
-            .DistinctBy(item => item.Name.ToLowerInvariant())
-            .Where(item => !excluded.Contains(item.Name.ToLowerInvariant()))
-            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+        return RustWindowDiscoveryBackend.GetRunningApplications(
+                windowEnumerator.GetWindows(), excludedProcessNames, installedPackages.Paths)
             .Select(item =>
             {
-                var isPackagedApp = installedPackages.Contains(item.Path);
-                var icon = !includeIcons ? null : isPackagedApp
-                    ? iconExtractor.GetByIconPath(packagedAppsService.GetByInstalledPath(item.Path, item.Id)?.IconPath)
-                    : iconExtractor.GetByProcessPath(item.Path);
+                var icon = !includeIcons ? null : item.IsPackagedApp
+                    ? iconExtractor.GetByIconPath(packagedAppsService.GetByInstalledPath(item.ProcessImagePath, item.ProcessId)?.IconPath)
+                    : iconExtractor.GetByProcessPath(item.ProcessImagePath);
 
                 return new RunningApplicationInfo(
-                    ProcessId: item.Id,
-                    ProcessName: item.Name,
-                    ProcessImagePath: item.Path,
-                    DisplayName: appRegistryCache.GetDisplayName(item.Name),
+                    ProcessId: item.ProcessId,
+                    ProcessName: item.ProcessName,
+                    ProcessImagePath: item.ProcessImagePath,
+                    DisplayName: appRegistryCache.GetDisplayName(item.ProcessName),
                     Icon: icon,
-                    IsPackagedApp: isPackagedApp);
+                    IsPackagedApp: item.IsPackagedApp);
             })
             .ToList();
     }
