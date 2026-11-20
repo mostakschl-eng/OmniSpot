@@ -1,6 +1,6 @@
 # AGENTS.md - OmniSpot
 
-OmniSpot is a Windows desktop application (.NET 8.0, C# 13) that enables hotkey-based window switching.
+OmniSpot is a Windows desktop application built with Rust and Slint. The Windows runtime and storage code live in `src/`. The desktop host, interface, and assets live in `desktop/`.
 
 ## Git & Version Control Rules
 
@@ -10,30 +10,16 @@ OmniSpot is a Windows desktop application (.NET 8.0, C# 13) that enables hotkey-
 
 ## Build Commands
 
-```bash
+```powershell
 # Build
-dotnet build
+cargo build --locked --manifest-path desktop/Cargo.toml --target-dir target/desktop
 
 # Build (Release)
-dotnet build -c Release
+cargo build --locked --release --manifest-path desktop/Cargo.toml --target-dir target/desktop
 
-# Format code
-dotnet format
-
-# Publish (framework-dependent)
-msbuild /t:Publish /p:PublishProfile=FolderProfile /p:Configuration=Release
-
-# Publish (self-contained, single file)
-msbuild /t:Publish /p:PublishProfile=SelfContainedProfile /p:Configuration=Release
+# Test the runtime
+cargo test --locked
 
 # Build Inno Setup Installer
 powershell -ExecutionPolicy Bypass -File .\build-installer.ps1
 ```
-
-## Additional Documentation
-
-- [C# Code Conventions](.agents/csharp-conventions.md) - Naming, formatting, language features
-- [Architecture & Patterns](.agents/architecture.md) - DI, project structure, logging
-- [WPF Patterns](.agents/wpf-patterns.md) - MVVM, UserControls, Dependency Properties, XAML
-- [Windows API](.agents/windows-api.md) - P/Invoke patterns and platform-specific code
-- [Testing Conventions](.agents/testing-conventions.md) - xUnit, AwesomeAssertions, fakes, file layout

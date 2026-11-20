@@ -1,5 +1,0 @@
-GetForegroundWindow
-SetForegroundWindow
-SendInput
-SHOW_WINDOW_CMD
-WINDOW_STYLE

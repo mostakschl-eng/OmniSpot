@@ -27,7 +27,7 @@ component EmptyRunningApps inherits VerticalBox {
 
 component AppIcon inherits Image {
     in property <image> app-icon;
-    source: app-icon.width > 0 ? app-icon : @image-url("../../OmniSpot/Resources/default_app_icon.png");
+    source: app-icon.width > 0 ? app-icon : @image-url("../assets/default_app_icon.png");
     width: 20px;
     height: 20px;
     image-fit: contain;

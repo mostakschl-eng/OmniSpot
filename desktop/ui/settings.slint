@@ -7,7 +7,7 @@ export { AboutWindow } from "about.slint";
 export { SpotlightWindow, AppOverlayWindow, WarningOverlayWindow, SearchRow, OverlayRow } from "floating.slint";
 
 export component OmniSpotTray inherits SystemTrayIcon {
-    icon: @image-url("../../OmniSpot/Resources/app-switcher.png");
+    icon: @image-url("../assets/app-switcher.png");
     tooltip: "OmniSpot";
     callback settings();
     callback exit-app();
@@ -393,7 +393,7 @@ export component SettingsWindow inherits Window {
                                                         padding-left: 6px; padding-right: 6px; padding-top: 0px; padding-bottom: 0px;
                                                         spacing: 8px;
                                                         Image {
-                                                            source: app.icon.width > 0 ? app.icon : @image-url("../../OmniSpot/Resources/default_app_icon.png");
+                                                            source: app.icon.width > 0 ? app.icon : @image-url("../assets/default_app_icon.png");
                                                             width: 20px; height: 20px; image-fit: contain;
                                                         }
                                                         Text { text: app.name; color: OmniTheme.text-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
@@ -464,7 +464,7 @@ export component SettingsWindow inherits Window {
                                         }
                                     }
                                     Image {
-                                        source: app.icon.width > 0 ? app.icon : @image-url("../../OmniSpot/Resources/default_app_icon.png");
+                                        source: app.icon.width > 0 ? app.icon : @image-url("../assets/default_app_icon.png");
                                         width: 24px; height: 24px; image-fit: contain;
                                     }
                                     Text { text: app.name; overflow: elide; color: OmniTheme.text-primary; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }

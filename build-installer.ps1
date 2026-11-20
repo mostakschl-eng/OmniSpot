@@ -1,84 +1,32 @@
 [CmdletBinding()]
-param (
-    [string]$Version = "1.0.0",
-    [switch]$SelfContained,
-    [switch]$All,
-    [switch]$Slint
-)
+param ([string]$Version)
 
 $ErrorActionPreference = "Stop"
+$manifest = Join-Path $PSScriptRoot 'desktop\Cargo.toml'
+if (-not $Version) {
+    $versionLine = Select-String -LiteralPath $manifest -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+    $Version = $versionLine.Matches[0].Groups[1].Value
+}
 
-# 1. Locate Inno Setup Compiler (ISCC.exe)
-$isccPath = $null
-$candidatePaths = @(
-    "C:\Program Files\Inno Setup 7\ISCC.exe",
-    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-    "C:\Program Files\Inno Setup 6\ISCC.exe"
-)
-
-$cmd = Get-Command "iscc" -ErrorAction SilentlyContinue
-if ($cmd) {
-    $isccPath = $cmd.Source
+$compiler = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+$iscc = if ($compiler) {
+    $compiler.Source
 } else {
-    foreach ($path in $candidatePaths) {
-        if (Test-Path $path) {
-            $isccPath = $path
-            break
-        }
-    }
+    @(
+        'C:\Program Files\Inno Setup 7\ISCC.exe'
+        'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+        'C:\Program Files\Inno Setup 6\ISCC.exe'
+    ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+}
+if (-not $iscc) {
+    throw 'Inno Setup Compiler (ISCC.exe) was not found.'
 }
 
-if (-not $isccPath) {
-    Write-Error "Inno Setup Compiler (ISCC.exe) not found. Please install Inno Setup 6+."
-    exit 1
-}
+$build = Join-Path $PSScriptRoot 'target\desktop'
+cargo build --locked --release --manifest-path $manifest --target-dir $build
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Using Inno Setup compiler: $isccPath" -ForegroundColor Cyan
-
-function Build-Package {
-    param (
-        [string]$Profile,
-        [string]$Ver
-    )
-
-    $pubxml = if ($Profile -eq "folder") { "FolderProfile" } else { "SelfContainedProfile" }
-    $publishFolder = "package-$Profile"
-
-    Write-Host "`n>>> Publishing OmniSpot with profile: $pubxml (Version: $Ver) ..." -ForegroundColor Green
-    dotnet publish OmniSpot/OmniSpot.csproj -p:PublishProfile=$pubxml -p:PublishDir="bin/publish/$publishFolder/" -c Release
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "dotnet publish failed for profile $pubxml"
-        exit $LASTEXITCODE
-    }
-
-    Write-Host "`n>>> Compiling Inno Setup installer for profile: $Profile ..." -ForegroundColor Green
-    Push-Location OmniSpot
-    try {
-        & $isccPath /DAppVersion="$Ver" /DProfileName="$Profile" /DPublishFolder="$publishFolder" installer.iss
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Inno Setup compilation failed for profile $Profile"
-            exit $LASTEXITCODE
-        }
-    }
-    finally {
-        Pop-Location
-    }
-}
-
-if ($Slint) {
-    $rustTarget = Join-Path $PSScriptRoot 'target\desktop'
-    cargo build --locked --release --manifest-path "$PSScriptRoot\desktop\Cargo.toml" --target-dir $rustTarget
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    $rustExe = Join-Path $rustTarget 'release\omnispot-desktop.exe'
-    & $isccPath "/DAppVersion=$Version" '/DProfileName=slint' "/DRustExe=$rustExe" "$PSScriptRoot\OmniSpot\installer.iss"
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-} elseif ($All) {
-    Build-Package -Profile "folder" -Ver $Version
-    Build-Package -Profile "selfcontained" -Ver $Version
-} elseif ($SelfContained) {
-    Build-Package -Profile "selfcontained" -Ver $Version
-} else {
-    Build-Package -Profile "folder" -Ver $Version
-}
-
-Write-Host "`nAll requested installers built successfully! Output directory: D:\OmniSpot\OmniSpot\Inno_Files" -ForegroundColor Cyan
+$exe = Join-Path $build 'release\omnispot-desktop.exe'
+$installer = Join-Path $PSScriptRoot 'installer\installer.iss'
+& $iscc "/DAppVersion=$Version" "/DRustExe=$exe" $installer
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

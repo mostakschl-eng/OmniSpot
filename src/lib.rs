@@ -11,7 +11,6 @@ mod switcher;
 #[allow(dead_code)]
 mod window_discovery;
 
-// These file-by-file ports remain disconnected from C# until integration is requested.
 #[allow(dead_code)]
 mod configuration;
 #[allow(dead_code)]
