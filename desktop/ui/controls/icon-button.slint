@@ -1,0 +1,21 @@
+import { OmniTheme, Symbol } from "../theme.slint";
+
+export component IconButton inherits Rectangle {
+    in property <string> glyph;
+    in property <length> icon-size: 14px;
+    in property <color> icon-color: OmniTheme.text-secondary;
+    in property <color> hover-color: OmniTheme.text-primary;
+    in property <color> hover-bg: OmniTheme.subtle;
+    callback clicked();
+    width: 28px; height: 28px; border-radius: 4px;
+    background: hit.has-hover ? root.hover-bg : transparent;
+    Symbol {
+        text: root.glyph;
+        font-size: root.icon-size;
+        color: hit.has-hover ? root.hover-color : root.icon-color;
+    }
+    hit := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

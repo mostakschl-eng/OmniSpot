@@ -1,60 +1,5 @@
-import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
-import { OmniTheme, PopupCard, SettingsCard, Symbol } from "theme.slint";
-
-export component NavigationItem inherits Rectangle {
-    in property <string> label;
-    in property <string> glyph;
-    in property <bool> selected;
-    callback activated();
-    height: 36px;
-    border-radius: 5px;
-    background: selected || hit.has-hover || focus.has-focus ? OmniTheme.subtle : transparent;
-    accessible-role: button;
-    accessible-label: label;
-    accessible-action-default => { root.activated(); }
-    if root.selected : Rectangle {
-        x: 0px; y: 10px; width: 3px; height: 16px; border-radius: 1.5px; background: OmniTheme.accent;
-    }
-    HorizontalBox {
-        padding-left: 12px; padding-right: 8px; spacing: 12px;
-        Symbol { width: 20px; text: root.glyph; }
-        Text { text: root.label; color: OmniTheme.text-primary; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
-    }
-    hit := TouchArea { clicked => { focus.focus(); root.activated(); } }
-    focus := FocusScope {
-        key-pressed(event) => {
-            if event.text == Key.Return || event.text == " " { root.activated(); return accept; }
-            reject
-        }
-    }
-}
-
-export component SettingsDialog inherits Rectangle {
-    in property <string> title;
-    in property <string> message;
-    in property <string> action;
-    callback confirm();
-    callback cancel();
-    background: #00000066;
-    TouchArea {}
-    PopupCard {
-        width: 430px;
-        height: 170px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        background: OmniTheme.window-background;
-        VerticalBox {
-            padding: 22px; spacing: 8px;
-            Text { text: root.title; font-size: 20px; font-weight: 600; color: OmniTheme.text-primary; }
-            Text { text: root.message; font-size: 14px; color: OmniTheme.text-primary; wrap: word-wrap; vertical-stretch: 1; }
-            HorizontalBox {
-                padding: 0px; spacing: 8px; alignment: end;
-                Button { text: root.action; height: 32px; clicked => { root.confirm(); } }
-                Button { text: "Cancel"; primary: true; height: 32px; clicked => { root.cancel(); } }
-            }
-        }
-    }
-}
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, SettingsCard, Symbol } from "../theme.slint";
 
 struct KeyboardKey { label: string, name: string, modifier: int, weight: float }
 
@@ -92,13 +37,17 @@ component KeyboardRow inherits HorizontalBox {
             vertical-alignment: key.modifier >= 0 || key.label == "Enter" ? bottom : center;
             height: parent.height - 5px;
         }
-        hit := TouchArea { enabled: parent.enabled; clicked => { focus.focus(); root.picked(key.modifier); } }
         focus := FocusScope {
             enabled: parent.enabled;
             key-pressed(event) => {
                 if event.text == Key.Return || event.text == " " { root.picked(key.modifier); return accept; }
                 reject
             }
+        }
+        hit := TouchArea {
+            enabled: parent.enabled;
+            mouse-cursor: parent.enabled ? pointer : default;
+            clicked => { focus.focus(); root.picked(key.modifier); }
         }
     }
 }

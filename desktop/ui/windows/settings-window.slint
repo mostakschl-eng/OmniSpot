@@ -1,0 +1,205 @@
+import { Button, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, Symbol } from "../theme.slint";
+import { NavigationItem } from "../controls/navigation-item.slint";
+import { SettingsDialog } from "../controls/settings-dialog.slint";
+import { GeneralPage } from "../pages/general-page.slint";
+import { ApplicationsPage, HotkeyDraft, PickerApp } from "../pages/applications-page.slint";
+import { OverlayPage } from "../pages/overlay-page.slint";
+import { SpotlightPage } from "../pages/spotlight-page.slint";
+import { StatsPage, StatCard, StatDay } from "../pages/stats-page.slint";
+import { AboutPage } from "../pages/about-page.slint";
+
+export { HotkeyDraft, PickerApp } from "../pages/applications-page.slint";
+export { StatCard, StatDay } from "../pages/stats-page.slint";
+
+export component OmniSpotTray inherits SystemTrayIcon {
+    icon: @image-url("../../assets/app-switcher.png");
+    tooltip: "OmniSpot";
+    callback settings();
+    callback exit-app();
+    clicked => { root.settings(); }
+    Menu {
+        MenuItem { title: "Settings"; activated => { root.settings(); } }
+        MenuSeparator {}
+        MenuItem { title: "Exit"; activated => { root.exit-app(); } }
+    }
+}
+
+export struct SettingsDraft {
+    theme: int,
+    modifier: int,
+    dynamic-mode: bool,
+    pulse-border: bool,
+    peek: bool,
+    overlay: bool,
+    overlay-delay: int,
+    overlay-keep-open: bool,
+    spotlight: bool,
+    spotlight-modifier: int,
+    spotlight-folders: [string],
+    applications: [HotkeyDraft],
+    stats: bool,
+}
+
+export component SettingsWindow inherits Window {
+    in-out property <SettingsDraft> draft;
+    in property <bool> dirty;
+    in property <bool> editable: true;
+    in property <string> feedback;
+    in property <bool> startup-enabled;
+    in property <bool> startup-interactive: true;
+    in property <bool> pulse-supported: true;
+    in property <[PickerApp]> running-apps;
+    in property <[HotkeyDraft]> dynamic-bindings;
+    in property <string> stats-summary;
+    in property <[StatCard]> stats-cards;
+    in property <[StatDay]> stats-week;
+    in property <string> version;
+
+    callback edit();
+    callback save();
+    callback reset();
+    callback discard();
+    callback preview-overlay(bool);
+    callback open-website();
+    callback open-log-folder();
+    callback copy-diagnostics();
+    callback docs(string);
+    callback add-folder();
+    callback remove-folder(int);
+    callback record-app-key(int, string) -> bool;
+    callback edit-app(int, HotkeyDraft);
+    callback add-app(string);
+    callback browse-app();
+    callback filter-apps(string);
+    callback pin-app(int);
+    callback toggle-startup(bool);
+    callback refresh-bindings();
+    callback remove-app(int);
+    callback move-app(int, int);
+    callback refresh-stats();
+    callback reset-stats();
+
+    in-out property <bool> confirm-reset;
+    in-out property <bool> confirm-close;
+    private property <int> page: 3;
+    private property <[string]> cycles: ["Next App", "Hide", "Next Window"];
+    private property <[string]> letters: [
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+        "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"
+    ];
+
+    title: "OmniSpot";
+    min-width: 900px;
+    max-width: 1200px;
+    preferred-width: 900px;
+    min-height: 570px;
+    preferred-height: 740px;
+    default-font-family: "Segoe UI";
+    background: OmniTheme.navigation-background;
+
+    VerticalBox {
+        padding-left: 10px; padding-right: 12px; padding-top: 14px; padding-bottom: 0px;
+        spacing: 0px;
+        HorizontalBox {
+            padding: 0px; spacing: 9px; vertical-stretch: 1;
+            VerticalBox {
+                width: 200px;
+                padding-left: 0px; padding-right: 0px; padding-top: 6px; padding-bottom: 0px;
+                spacing: 2px;
+                NavigationItem { label: "General"; glyph: "\u{e713}"; selected: root.page == 0; activated => { root.page = 0; } }
+                NavigationItem { label: "Applications"; glyph: "\u{e71d}"; selected: root.page == 3; activated => { root.page = 3; root.refresh-bindings(); } }
+                NavigationItem { label: "Overlay"; glyph: "\u{e7c4}"; selected: root.page == 1; activated => { root.page = 1; } }
+                NavigationItem { label: "Spotlight Search"; glyph: "\u{e721}"; selected: root.page == 2; activated => { root.page = 2; } }
+                NavigationItem { label: "Stats"; glyph: "\u{e9d9}"; selected: root.page == 4; activated => { root.page = 4; root.refresh-stats(); } }
+                Rectangle { vertical-stretch: 1; }
+                Rectangle { height: 1px; background: OmniTheme.divider; }
+                NavigationItem { label: "About"; glyph: "\u{e946}"; selected: root.page == 5; activated => { root.page = 5; } }
+                Rectangle { height: 10px; }
+            }
+            Rectangle {
+                background: OmniTheme.page-background;
+                border-radius: 6px;
+                horizontal-stretch: 1;
+                ScrollView {
+                    x: 20px; y: 20px; width: parent.width - 26px; height: parent.height - 30px;
+                    if root.page == 0 : GeneralPage {
+                        theme <=> root.draft.theme;
+                        modifier <=> root.draft.modifier;
+                        dynamic-mode <=> root.draft.dynamic-mode;
+                        pulse-border <=> root.draft.pulse-border;
+                        pulse-supported: root.pulse-supported;
+                        startup-enabled: root.startup-enabled;
+                        startup-interactive: root.startup-interactive;
+                        edit => { root.edit(); }
+                        toggle-startup(v) => { root.toggle-startup(v); }
+                        docs(target) => { root.docs(target); }
+                    }
+                    if root.page == 3 : ApplicationsPage {
+                        applications: root.draft.applications;
+                        dynamic-bindings: root.dynamic-bindings;
+                        running-apps: root.running-apps;
+                        letters: root.letters;
+                        cycles: root.cycles;
+                        record-app-key(idx, key) => { root.record-app-key(idx, key) }
+                        remove-app(idx) => { root.remove-app(idx); }
+                        move-app(idx, delta) => { root.move-app(idx, delta); }
+                        edit-app(idx, draft) => { root.edit-app(idx, draft); }
+                        pin-app(idx) => { root.pin-app(idx); }
+                        filter-apps(q) => { root.filter-apps(q); }
+                        add-app(path) => { root.add-app(path); }
+                        browse-app => { root.browse-app(); }
+                    }
+                    if root.page == 1 : OverlayPage {
+                        overlay <=> root.draft.overlay;
+                        overlay-delay <=> root.draft.overlay-delay;
+                        overlay-keep-open <=> root.draft.overlay-keep-open;
+                        preview-overlay(v) => { root.preview-overlay(v); }
+                        edit => { root.edit(); }
+                    }
+                    if root.page == 2 : SpotlightPage {
+                        spotlight <=> root.draft.spotlight;
+                        spotlight-modifier <=> root.draft.spotlight-modifier;
+                        spotlight-folders: root.draft.spotlight-folders;
+                        add-folder => { root.add-folder(); }
+                        remove-folder(idx) => { root.remove-folder(idx); }
+                        edit => { root.edit(); }
+                    }
+                    if root.page == 4 : StatsPage {
+                        stats-enabled <=> root.draft.stats;
+                        stats-summary: root.stats-summary;
+                        stats-cards: root.stats-cards;
+                        stats-week: root.stats-week;
+                        refresh-stats => { root.refresh-stats(); }
+                        request-reset => { root.confirm-reset = true; }
+                        edit => { root.edit(); }
+                    }
+                    if root.page == 5 : AboutPage {
+                        version: root.version;
+                        feedback: root.feedback;
+                        open-website => { root.open-website(); }
+                        open-log-folder => { root.open-log-folder(); }
+                        copy-diagnostics => { root.copy-diagnostics(); }
+                    }
+                }
+            }
+        }
+        HorizontalBox {
+            padding-left: 16px; padding-right: 12px; padding-top: 10px; padding-bottom: 12px;
+            spacing: 10px;
+            Text { text: root.feedback; color: OmniTheme.text-secondary; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+            Button { text: "Reset changes"; height: 32px; enabled: root.dirty; clicked => { root.reset(); } }
+            Button { text: "Save & Apply"; height: 32px; enabled: root.editable && root.dirty; primary: true; clicked => { root.save(); } }
+        }
+    }
+    if root.confirm-reset : SettingsDialog {
+        title: "Reset all stats?"; message: "This action cannot be undone."; action: "Reset";
+        confirm => { root.confirm-reset = false; root.reset-stats(); }
+        cancel => { root.confirm-reset = false; }
+    }
+    if root.confirm-close : SettingsDialog {
+        title: "Unsaved Changes"; message: "You have unsaved changes. Closing this window will discard them. Are you sure?"; action: "Discard";
+        confirm => { root.confirm-close = false; root.discard(); }
+        cancel => { root.confirm-close = false; }
+    }
+}

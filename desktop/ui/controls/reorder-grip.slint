@@ -1,0 +1,20 @@
+import { OmniTheme } from "../theme.slint";
+
+export component ReorderGrip inherits Rectangle {
+    width: 14px; height: 16px;
+    HorizontalLayout {
+        spacing: 3px; alignment: center;
+        VerticalLayout {
+            spacing: 3px; alignment: center;
+            Rectangle { width: 3px; height: 3px; border-radius: 1.5px; background: OmniTheme.text-tertiary; }
+            Rectangle { width: 3px; height: 3px; border-radius: 1.5px; background: OmniTheme.text-tertiary; }
+            Rectangle { width: 3px; height: 3px; border-radius: 1.5px; background: OmniTheme.text-tertiary; }
+        }
+        VerticalLayout {
+            spacing: 3px; alignment: center;
+            Rectangle { width: 3px; height: 3px; border-radius: 1.5px; background: OmniTheme.text-tertiary; }
+            Rectangle { width: 3px; height: 3px; border-radius: 1.5px; background: OmniTheme.text-tertiary; }
+            Rectangle { width: 3px; height: 3px; border-radius: 1.5px; background: OmniTheme.text-tertiary; }
+        }
+    }
+}

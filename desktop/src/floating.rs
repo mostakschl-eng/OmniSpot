@@ -38,7 +38,7 @@ pub fn create_spotlight(
         } else {
             SharedString::default()
         });
-        window.set_selected_index(0);
+        window.set_selected_index(if rows.is_empty() { -1 } else { 0 });
         window.set_results(ModelRc::new(VecModel::from(rows)));
     });
     let index = search.clone();

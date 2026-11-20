@@ -1,0 +1,36 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { OmniTheme, Symbol } from "../theme.slint";
+
+export component NavigationItem inherits Rectangle {
+    in property <string> label;
+    in property <string> glyph;
+    in property <bool> selected;
+    callback activated();
+    height: 36px;
+    border-radius: 5px;
+    background: selected ? (OmniTheme.dark ? #ffffff12 : #0000000e) : hit.has-hover ? (OmniTheme.dark ? #ffffff0d : #00000009) : focus.has-focus ? (OmniTheme.dark ? #ffffff08 : #00000005) : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.activated(); }
+    if root.selected : Rectangle {
+        x: 0px; y: 9px; width: 3px; height: 18px; border-radius: 1.5px; background: OmniTheme.accent;
+    }
+    HorizontalBox {
+        padding-left: 12px; padding-right: 8px; spacing: 12px;
+        Symbol { width: 20px; text: root.glyph; font-size: 16px; }
+        Text { text: root.label; color: OmniTheme.text-primary; font-size: 14px; horizontal-stretch: 1; }
+    }
+    focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.activated(); return accept; }
+            reject
+        }
+    }
+    hit := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            focus.focus();
+            root.activated();
+        }
+    }
+}

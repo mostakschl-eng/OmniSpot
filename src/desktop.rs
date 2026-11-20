@@ -243,18 +243,38 @@ pub fn default_profile_dir() -> Result<std::path::PathBuf, String> {
     Ok(Path::new(&app_data).join("OmniSpot"))
 }
 
-pub fn set_passive_window(handle: isize) {
+pub fn hide_from_taskbar(handle: isize, active: bool) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
-        WS_EX_TOOLWINDOW,
+        GetWindowLongW, SetWindowLongW, SetWindowPos, GWL_EXSTYLE, SWP_FRAMECHANGED,
+        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, WS_EX_APPWINDOW,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
     };
     let hwnd = HWND(handle as *mut _);
     unsafe {
         let style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
-        let style = (style & !WS_EX_APPWINDOW.0) | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0;
+        let mut style = (style & !WS_EX_APPWINDOW.0) | WS_EX_TOOLWINDOW.0;
+        if !active {
+            style |= WS_EX_NOACTIVATE.0;
+        } else {
+            style &= !WS_EX_NOACTIVATE.0;
+        }
         SetWindowLongW(hwnd, GWL_EXSTYLE, style as i32);
+        let flags = SWP_NOMOVE
+            | SWP_NOSIZE
+            | SWP_NOZORDER
+            | SWP_FRAMECHANGED
+            | if !active {
+                SWP_NOACTIVATE
+            } else {
+                windows::Win32::UI::WindowsAndMessaging::SET_WINDOW_POS_FLAGS(0)
+            };
+        let _ = SetWindowPos(hwnd, HWND::default(), 0, 0, 0, 0, flags);
     }
+}
+
+pub fn set_passive_window(handle: isize) {
+    hide_from_taskbar(handle, false);
 }
 
 pub fn set_window_icon(handle: isize) {
@@ -329,6 +349,10 @@ pub fn focus_window(handle: isize) {
     let _ = unsafe {
         windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(HWND(handle as *mut _))
     };
+}
+
+pub fn foreground_window_handle() -> isize {
+    unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }.0 as isize
 }
 
 pub fn show_startup_error(message: &str) {

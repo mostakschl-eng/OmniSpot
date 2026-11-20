@@ -1,0 +1,395 @@
+import { Button, HorizontalBox, LineEdit, ScrollView, Switch, VerticalBox } from "std-widgets.slint";
+import { KeyBadge, OmniTheme, PopupCard, SettingsCard, Symbol } from "../theme.slint";
+import { Heading } from "../controls/setting-row.slint";
+import { CycleModePill } from "../controls/cycle-selector.slint";
+import { IconButton } from "../controls/icon-button.slint";
+import { ReorderGrip } from "../controls/reorder-grip.slint";
+import { NavigationItem } from "../controls/navigation-item.slint";
+
+export struct HotkeyDraft {
+    icon: image,
+    name: string,
+    path: string,
+    key: int,
+    cycle: int,
+    start: bool,
+    packaged: bool,
+    aumid: string,
+}
+
+export struct PickerApp {
+    name: string,
+    path: string,
+    icon: image,
+}
+
+export component ApplicationsPage inherits VerticalBox {
+    in property <[HotkeyDraft]> applications;
+    in property <[HotkeyDraft]> dynamic-bindings;
+    in property <[PickerApp]> running-apps;
+    in property <[string]> letters;
+    in property <[string]> cycles;
+    callback record-app-key(int, string) -> bool;
+    callback remove-app(int);
+    callback move-app(int, int);
+    callback edit-app(int, HotkeyDraft);
+    callback pin-app(int);
+    callback filter-apps(string);
+    callback add-app(string);
+    callback browse-app();
+
+    padding-left: 0px; padding-right: 12px; padding-top: 14px; padding-bottom: 20px;
+    spacing: 6px; alignment: start;
+
+    app-header := HorizontalBox {
+        padding: 0px; spacing: 8px;
+        Heading { text: "Applications"; horizontal-stretch: 1; vertical-alignment: center; }
+        Button {
+            text: "+ Add"; height: 30px;
+            clicked => { root.filter-apps(""); app-picker.show(); }
+        }
+        app-picker := PopupWindow {
+            x: max(0px, app-header.width - 320px); y: app-header.height + 5px;
+            width: 320px;
+            close-policy: close-on-click-outside;
+            init => { app-query.focus(); }
+            PopupCard {
+                border-radius: 8px;
+                background: OmniTheme.window-background;
+                VerticalBox {
+                    padding: 8px; spacing: 6px;
+                    app-query := LineEdit {
+                        height: 32px; placeholder-text: "Search...";
+                        edited => { root.filter-apps(self.text); }
+                        accepted => {
+                            if root.running-apps.length > 0 {
+                                root.add-app(root.running-apps[0].path);
+                                app-picker.close();
+                            }
+                        }
+                    }
+                    if root.running-apps.length > 0 : ScrollView {
+                        height: min(300px, root.running-apps.length * 30px);
+                        VerticalBox {
+                            padding: 0px; spacing: 0px;
+                            for app in root.running-apps : Rectangle {
+                                height: 30px; border-radius: 4px;
+                                background: hover.has-hover ? OmniTheme.accent.with-alpha(0.08) : transparent;
+                                HorizontalBox {
+                                    padding-left: 6px; padding-right: 6px; padding-top: 0px; padding-bottom: 0px;
+                                    spacing: 8px;
+                                    Image {
+                                        source: app.icon.width > 0 ? app.icon : @image-url("../../assets/default_app_icon.png");
+                                        width: 20px; height: 20px; image-fit: contain;
+                                    }
+                                    Text { text: app.name; color: OmniTheme.text-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                }
+                                hover := TouchArea { mouse-cursor: pointer; clicked => { root.add-app(app.path); app-picker.close(); } }
+                                accessible-role: button; accessible-label: app.name;
+                                accessible-action-default => { root.add-app(app.path); app-picker.close(); }
+                            }
+                        }
+                    }
+                    Rectangle { height: 1px; background: OmniTheme.divider; }
+                    NavigationItem {
+                        label: "Browse for file..."; glyph: "\u{e838}";
+                        activated => { app-picker.close(); root.browse-app(); }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.applications.length == 0 && root.dynamic-bindings.length == 0 : VerticalBox {
+        padding-top: 184px; spacing: 8px; alignment: center;
+        Symbol { text: "\u{e71d}"; font-size: 64px; color: OmniTheme.text-tertiary; }
+        Text {
+            text: "No applications configured"; color: OmniTheme.text-primary;
+            horizontal-alignment: center; font-size: 14px; font-weight: 600;
+        }
+        HorizontalBox {
+            alignment: center; padding: 0px;
+            Text {
+                width: 330px;
+                text: "Add an application and assign a key. Press your configured modifier key, then that key to instantly switch to that application.";
+                color: OmniTheme.text-secondary; horizontal-alignment: center; font-size: 13px; wrap: word-wrap;
+            }
+        }
+        HorizontalBox {
+            alignment: center; padding-top: 12px;
+            Button {
+                text: "+  Add application"; primary: true; width: 140px; height: 32px;
+                clicked => { root.filter-apps(""); app-picker.show(); }
+            }
+        }
+    }
+
+    for app[index] in root.applications : app-card := Rectangle {
+        private property <bool> expanded;
+        border-radius: 4px;
+        border-width: 1px;
+        border-color: OmniTheme.card-border;
+        background: header-hover.has-hover ? (OmniTheme.dark ? #ffffff14 : #ffffff) : OmniTheme.card-background;
+
+        VerticalLayout {
+            padding: 0px; spacing: 0px;
+
+            // Application Card Header (52px, perfectly vertically centered)
+            header := Rectangle {
+                height: 52px;
+                header-hover := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { app-card.expanded = !app-card.expanded; }
+                }
+
+                HorizontalLayout {
+                    padding-left: 14px; padding-right: 14px; spacing: 10px;
+
+                    // 1. Drag grip handle
+                    VerticalLayout {
+                        alignment: center; width: 14px;
+                        ReorderGrip {}
+                    }
+
+                    // 2. Key badge & recorder
+                    VerticalLayout {
+                        alignment: center; width: 30px;
+                        recorder := FocusScope {
+                            width: 30px; height: 30px;
+                            property <bool> recording;
+                            changed has-focus => {
+                                if !self.has-focus { self.recording = false; }
+                            }
+                            key-pressed(event) => {
+                                if !self.recording { return reject; }
+                                if event.text == Key.Escape || root.record-app-key(index, event.text) {
+                                    self.recording = false;
+                                }
+                                accept
+                            }
+                            Rectangle {
+                                width: 30px; height: 30px; border-radius: 4px;
+                                border-width: 1px;
+                                border-color: recorder.recording ? OmniTheme.accent : key-hit.has-hover ? OmniTheme.accent : OmniTheme.divider;
+                                background: recorder.recording ? OmniTheme.accent.with-alpha(0.15) : key-hit.has-hover ? OmniTheme.accent.with-alpha(0.12) : OmniTheme.subtle;
+                                Text {
+                                    text: recorder.recording ? "…" : root.letters[app.key];
+                                    font-size: 13px; font-weight: 600;
+                                    color: recorder.recording ? OmniTheme.accent : OmniTheme.text-primary;
+                                }
+                                key-hit := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { recorder.focus(); recorder.recording = true; }
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Application icon
+                    VerticalLayout {
+                        alignment: center; width: 24px;
+                        Image {
+                            source: app.icon.width > 0 ? app.icon : @image-url("../../assets/default_app_icon.png");
+                            width: 24px; height: 24px; image-fit: contain;
+                        }
+                    }
+
+                    // 4. Application name
+                    VerticalLayout {
+                        alignment: center; horizontal-stretch: 1;
+                        Text {
+                            text: app.name; overflow: elide; color: OmniTheme.text-primary;
+                            font-size: 14px; font-weight: 500;
+                        }
+                    }
+
+                    // 5. Badges: CycleMode pill badge + AutoStart indicator (outside pill)
+                    VerticalLayout {
+                        alignment: center;
+                        HorizontalLayout {
+                            spacing: 6px;
+                            alignment: center;
+
+                            // Cycle mode pill badge
+                            Rectangle {
+                                height: 22px;
+                                border-radius: 6px;
+                                border-width: 1px;
+                                border-color: OmniTheme.divider;
+                                background: OmniTheme.subtle;
+                                HorizontalLayout {
+                                    padding-left: 8px; padding-right: 8px;
+                                    alignment: center;
+                                    Text {
+                                        text: root.cycles[app.cycle];
+                                        color: OmniTheme.text-secondary;
+                                        font-size: 11px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // AutoStart play icon (placed outside badge pill, matching reference C#)
+                            if app.start : Rectangle {
+                                width: 14px;
+                                height: 22px;
+                                Symbol {
+                                    width: 14px;
+                                    height: 14px;
+                                    y: (parent.height - self.height) / 2;
+                                    text: "\u{e768}";
+                                    color: OmniTheme.accent;
+                                    font-size: 11px;
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. Delete trash can button
+                    VerticalLayout {
+                        alignment: center; width: 28px;
+                        IconButton {
+                            glyph: "\u{e74d}";
+                            icon-color: OmniTheme.text-tertiary;
+                            hover-color: #ff6b6b;
+                            hover-bg: #ff000018;
+                            clicked => { root.remove-app(index); }
+                        }
+                    }
+
+                    // 7. Expand / collapse chevron button
+                    VerticalLayout {
+                        alignment: center; width: 28px;
+                        IconButton {
+                            glyph: app-card.expanded ? "\u{e70e}" : "\u{e70d}";
+                            icon-size: 12px;
+                            icon-color: OmniTheme.text-tertiary;
+                            hover-color: OmniTheme.text-primary;
+                            clicked => { app-card.expanded = !app-card.expanded; }
+                        }
+                    }
+                }
+            }
+
+            // Expanded settings section
+            if app-card.expanded : VerticalLayout {
+                padding-left: 20px; padding-right: 20px; padding-top: 4px; padding-bottom: 14px; spacing: 10px;
+
+                Rectangle { height: 1px; background: OmniTheme.divider; }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    Text {
+                        text: "When focused:"; color: OmniTheme.text-secondary;
+                        font-size: 13px; width: 120px; horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                    CycleModePill {
+                        text: "Next App";
+                        selected: app.cycle == 0;
+                        clicked => {
+                            root.edit-app(index, { icon: app.icon, name: app.name, path: app.path, key: app.key, cycle: 0, start: app.start, packaged: app.packaged, aumid: app.aumid });
+                        }
+                    }
+                    CycleModePill {
+                        text: "Hide";
+                        selected: app.cycle == 1;
+                        clicked => {
+                            root.edit-app(index, { icon: app.icon, name: app.name, path: app.path, key: app.key, cycle: 1, start: app.start, packaged: app.packaged, aumid: app.aumid });
+                        }
+                    }
+                    CycleModePill {
+                        text: "Next Window";
+                        selected: app.cycle == 2;
+                        clicked => {
+                            root.edit-app(index, { icon: app.icon, name: app.name, path: app.path, key: app.key, cycle: 2, start: app.start, packaged: app.packaged, aumid: app.aumid });
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: center;
+                    Text {
+                        text: "When not running:"; color: OmniTheme.text-secondary;
+                        font-size: 13px; width: 120px; horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                    Switch {
+                        text: "Start"; checked: app.start;
+                        toggled => {
+                            root.edit-app(index, { icon: app.icon, name: app.name, path: app.path, key: app.key, cycle: app.cycle, start: self.checked, packaged: app.packaged, aumid: app.aumid });
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        IconButton {
+                            glyph: "\u{e74a}";
+                            icon-size: 11px;
+                            clicked => { if index > 0 { root.move-app(index, -1); } }
+                        }
+                        IconButton {
+                            glyph: "\u{e74b}";
+                            icon-size: 11px;
+                            clicked => { if index + 1 < root.applications.length { root.move-app(index, 1); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.dynamic-bindings.length > 0 : VerticalBox {
+        padding: 0px; padding-top: 16px; spacing: 6px;
+        Heading { text: "Dynamic bindings"; font-size: 13px; }
+        for app[index] in root.dynamic-bindings : Rectangle {
+            height: 44px;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: OmniTheme.card-border;
+            background: dyn-hover.has-hover ? (OmniTheme.dark ? #ffffff14 : #ffffff) : OmniTheme.card-background;
+
+            dyn-hover := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.pin-app(index); }
+            }
+
+            HorizontalLayout {
+                padding-left: 14px; padding-right: 12px; spacing: 12px;
+
+                VerticalLayout {
+                    alignment: center; width: 28px;
+                    KeyBadge { width: 28px; height: 28px; label: root.letters[app.key]; }
+                }
+
+                VerticalLayout {
+                    alignment: center; width: 20px;
+                    Image { source: app.icon; width: 20px; height: 20px; image-fit: contain; }
+                }
+
+                VerticalLayout {
+                    alignment: center; horizontal-stretch: 1;
+                    Text {
+                        text: app.name; font-size: 13px; color: OmniTheme.text-secondary;
+                        overflow: elide;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center; width: 26px;
+                    IconButton {
+                        width: 26px; height: 26px;
+                        glyph: "\u{e718}";
+                        icon-color: OmniTheme.text-secondary;
+                        hover-color: OmniTheme.accent;
+                        hover-bg: OmniTheme.accent.with-alpha(0.15);
+                        clicked => { root.pin-app(index); }
+                    }
+                }
+            }
+        }
+    }
+}

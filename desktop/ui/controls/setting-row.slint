@@ -1,0 +1,43 @@
+import { HorizontalBox, Switch, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, SettingsCard, Symbol } from "../theme.slint";
+
+export component Heading inherits Text {
+    color: OmniTheme.text-primary;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+export component SettingRow inherits SettingsCard {
+    in property <string> glyph;
+    in property <string> label;
+    in property <string> description;
+    HorizontalBox {
+        padding-left: 20px;
+        padding-right: 20px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 16px;
+        if root.glyph != "" : Symbol { width: 22px; text: root.glyph; font-size: 20px; }
+        VerticalBox {
+            padding: 0px;
+            spacing: 3px;
+            alignment: center;
+            horizontal-stretch: 1;
+            Text { text: root.label; color: OmniTheme.text-primary; font-size: 14px; font-weight: 600; wrap: word-wrap; }
+            if root.description != "" : Text { text: root.description; color: OmniTheme.text-secondary; font-size: 13px; wrap: word-wrap; }
+        }
+        @children
+    }
+}
+
+export component SettingSwitch inherits SettingRow {
+    in-out property <bool> checked;
+    in property <bool> interactive: true;
+    callback edited(bool);
+    Switch {
+        enabled: root.interactive;
+        text: root.checked ? "On" : "Off";
+        checked: root.checked;
+        toggled => { root.edited(self.checked); }
+    }
+}

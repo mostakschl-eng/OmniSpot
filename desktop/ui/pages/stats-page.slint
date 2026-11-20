@@ -1,0 +1,185 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, SettingsCard, Symbol } from "../theme.slint";
+import { Heading, SettingRow } from "../controls/setting-row.slint";
+
+export struct StatCard {
+    title: string,
+    value: string,
+    progress: float,
+}
+
+export struct StatDay {
+    day: string,
+    saved: string,
+    height-ratio: float,
+}
+
+component MetricCard inherits SettingsCard {
+    in property <StatCard> data;
+    in property <bool> hero;
+    in property <string> glyph;
+    in property <color> tint: OmniTheme.accent;
+    min-height: hero ? 126px : 96px;
+    horizontal-stretch: 1;
+    VerticalBox {
+        padding: 16px; spacing: 5px;
+        if root.hero : HorizontalBox {
+            padding: 0px;
+            Symbol { text: root.glyph; color: root.tint; font-size: 20px; }
+            Rectangle { horizontal-stretch: 1; }
+            Symbol { text: "\u{e946}"; color: OmniTheme.text-tertiary; font-size: 12px; }
+        }
+        if !root.hero : Heading { text: root.data.title; }
+        Text {
+            text: root.data.value; color: OmniTheme.text-primary;
+            font-weight: 600; font-size: root.hero ? 25px : 16px; wrap: word-wrap;
+        }
+        if root.hero : Text { text: root.data.title; color: OmniTheme.text-secondary; font-size: 12px; wrap: word-wrap; }
+        if root.data.progress >= 0 : Rectangle {
+            height: 5px; border-radius: 2.5px;
+            background: OmniTheme.divider;
+            Rectangle {
+                x: 0px; width: parent.width * clamp(root.data.progress / 100.0, 0, 1);
+                height: 5px; border-radius: 2.5px; background: root.tint;
+            }
+        }
+    }
+}
+
+component PrivacyPreview inherits VerticalBox {
+    padding: 0px; spacing: 8px;
+    HorizontalBox {
+        spacing: 8px; padding: 0px;
+        MetricCard { hero: true; glyph: "\u{e81c}"; data: { title: "Life gained back", value: "3h 42m", progress: -1 }; }
+        MetricCard { hero: true; glyph: "\u{e945}"; tint: #ef943a; data: { title: "Productivity streak", value: "14 days", progress: 70 }; }
+        MetricCard { hero: true; glyph: "\u{e7be}"; tint: #b78bed; data: { title: "Muscle Memory Index", value: "A · Teleporter", progress: -1 }; }
+    }
+    SettingsCard {
+        height: 120px;
+        VerticalBox {
+            padding: 14px; spacing: 8px;
+            Heading { text: "Time saved over the last 7 days"; }
+            HorizontalBox {
+                padding: 0px; spacing: 8px;
+                for h in [0.3, 0.5, 0.8, 0.4, 0.9, 0.6, 0.75] : Rectangle {
+                    height: 56px; horizontal-stretch: 1;
+                    Rectangle {
+                        width: min(32px, parent.width); height: h * parent.height;
+                        x: (parent.width - self.width) / 2; y: parent.height - self.height;
+                        border-radius: 3px; background: OmniTheme.accent;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component StatsPage inherits VerticalBox {
+    in-out property <bool> stats-enabled;
+    in property <string> stats-summary;
+    in property <[StatCard]> stats-cards;
+    in property <[StatDay]> stats-week;
+    callback refresh-stats();
+    callback request-reset();
+    callback edit();
+
+    padding-left: 0px; padding-right: 12px; padding-top: 14px; padding-bottom: 20px;
+    spacing: 8px; alignment: start;
+
+    Heading { text: "Statistics"; }
+
+    if !root.stats-enabled : Rectangle {
+        height: 566px;
+        PrivacyPreview {}
+        Rectangle { background: OmniTheme.page-background.with-alpha(0.44); }
+        VerticalBox {
+            alignment: center; spacing: 10px; padding: 0px;
+            Rectangle {
+                height: 52px;
+                Symbol { text: "\u{ea18}"; color: OmniTheme.accent; font-size: 52px; }
+                Symbol {
+                    x: parent.width / 2 + 11px; y: 28px; width: 20px; height: 25px;
+                    text: "\u{e72e}"; color: OmniTheme.accent; font-size: 20px;
+                }
+            }
+            Text { text: "Privacy Shield"; color: OmniTheme.text-primary; font-size: 22px; font-weight: 700; horizontal-alignment: center; }
+            Text { text: "Usage statistics are off by default"; color: OmniTheme.text-secondary; font-size: 13px; horizontal-alignment: center; }
+            HorizontalBox {
+                padding: 0px; alignment: center;
+                SettingsCard {
+                    width: 380px;
+                    VerticalBox {
+                        padding: 16px; spacing: 8px;
+                        Heading { text: "✓  Privacy Pledge"; }
+                        Text { text: "All usage data is stored locally on your device only. Nothing is ever transmitted, sold, or shared. You can disable collection at any time."; color: OmniTheme.text-primary; font-size: 12px; wrap: word-wrap; }
+                    }
+                }
+            }
+            HorizontalBox {
+                alignment: center; padding: 8px;
+                Button { text: "Enable Statistics"; width: 149px; height: 36px; primary: true; clicked => { root.stats-enabled = true; root.edit(); root.refresh-stats(); } }
+            }
+        }
+    }
+
+    if root.stats-enabled : HorizontalBox {
+        spacing: 8px; padding: 0px;
+        MetricCard {
+            hero: true; glyph: "\u{e81c}";
+            data: root.stats-cards.length > 0 ? root.stats-cards[0] : { title: "Life gained back", value: "—", progress: -1 };
+        }
+        MetricCard {
+            hero: true; glyph: "\u{e945}"; tint: #ef943a;
+            data: root.stats-cards.length > 2
+                ? { title: root.stats-cards[2].title, value: root.stats-cards[2].value, progress: root.stats-cards[1].progress }
+                : { title: "Productivity streak", value: "0 days", progress: 0 };
+        }
+        MetricCard {
+            hero: true; glyph: "\u{e7be}"; tint: #b78bed;
+            data: root.stats-cards.length > 3 ? root.stats-cards[3] : { title: "Muscle Memory Index", value: "—", progress: -1 };
+        }
+    }
+
+    if root.stats-enabled && root.stats-cards.length == 0 : SettingRow {
+        glyph: "\u{e9d9}"; label: "Establishing Baseline"; description: root.stats-summary;
+        Button { text: "Refresh"; height: 30px; clicked => { root.refresh-stats(); } }
+    }
+
+    if root.stats-enabled && root.stats-week.length > 0 : SettingsCard {
+        VerticalBox {
+            padding: 14px; spacing: 8px;
+            Heading { text: "Time saved over the last 7 days"; }
+            HorizontalBox {
+                padding: 0px; spacing: 8px;
+                for stat in root.stats-week : VerticalBox {
+                    padding: 0px; spacing: 4px; horizontal-stretch: 1;
+                    Text { text: stat.saved; color: OmniTheme.text-primary; horizontal-alignment: center; }
+                    Rectangle {
+                        height: 56px;
+                        Rectangle {
+                            width: min(32px, parent.width); height: clamp(stat.height-ratio, 0, 1) * parent.height;
+                            x: (parent.width - self.width) / 2; y: parent.height - self.height;
+                            border-radius: 3px; background: OmniTheme.accent;
+                        }
+                    }
+                    Text { text: stat.day; color: OmniTheme.text-secondary; horizontal-alignment: center; }
+                }
+            }
+        }
+    }
+
+    if root.stats-enabled : VerticalBox {
+        padding: 0px; spacing: 8px;
+        for row in max(0, ceil((root.stats-cards.length - 4) / 2)) : HorizontalBox {
+            padding: 0px; spacing: 8px;
+            MetricCard { data: root.stats-cards[4 + row * 2]; }
+            if 5 + row * 2 < root.stats-cards.length : MetricCard { data: root.stats-cards[5 + row * 2]; }
+        }
+        HorizontalBox {
+            padding: 0px; spacing: 8px;
+            Text { text: "All statistics are stored locally on this device."; font-size: 12px; color: OmniTheme.text-tertiary; horizontal-stretch: 1; vertical-alignment: center; wrap: word-wrap; }
+            Button { text: "Reset All Statistics"; height: 30px; clicked => { root.request-reset(); } }
+            Button { text: "Disable Data Collection"; height: 30px; clicked => { root.stats-enabled = false; root.edit(); } }
+        }
+    }
+}

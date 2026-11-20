@@ -1,0 +1,28 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { OmniTheme } from "../theme.slint";
+
+export component CycleModePill inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked();
+    height: 24px;
+    border-radius: 4px;
+    background: selected ? OmniTheme.accent : hit.has-hover ? (OmniTheme.dark ? #ffffff14 : #0000000e) : OmniTheme.subtle;
+    border-width: selected ? 0px : 1px;
+    border-color: OmniTheme.divider;
+    HorizontalBox {
+        padding-left: 10px; padding-right: 10px; padding-top: 0px; padding-bottom: 0px;
+        alignment: center;
+        Text {
+            text: root.text;
+            font-size: 12px;
+            font-weight: root.selected ? 600 : 400;
+            color: root.selected ? OmniTheme.accent-text : OmniTheme.text-primary;
+            vertical-alignment: center;
+        }
+    }
+    hit := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

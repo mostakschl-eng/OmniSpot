@@ -1,0 +1,29 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, PopupCard } from "../theme.slint";
+
+export component SettingsDialog inherits Rectangle {
+    in property <string> title;
+    in property <string> message;
+    in property <string> action;
+    callback confirm();
+    callback cancel();
+    background: #00000066;
+    TouchArea {}
+    PopupCard {
+        width: 430px;
+        height: 170px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: OmniTheme.window-background;
+        VerticalBox {
+            padding: 22px; spacing: 8px;
+            Text { text: root.title; font-size: 20px; font-weight: 600; color: OmniTheme.text-primary; }
+            Text { text: root.message; font-size: 14px; color: OmniTheme.text-primary; wrap: word-wrap; vertical-stretch: 1; }
+            HorizontalBox {
+                padding: 0px; spacing: 8px; alignment: end;
+                Button { text: root.action; height: 32px; clicked => { root.confirm(); } }
+                Button { text: "Cancel"; primary: true; height: 32px; clicked => { root.cancel(); } }
+            }
+        }
+    }
+}

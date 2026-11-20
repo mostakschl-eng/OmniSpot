@@ -1,5 +1,5 @@
 import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
-import { OmniTheme, SettingsCard, Symbol, TextLink } from "theme.slint";
+import { OmniTheme, SettingsCard, Symbol, TextLink } from "../theme.slint";
 
 component SupportRow inherits SettingsCard {
     in property <string> glyph;
@@ -26,7 +26,7 @@ component SupportRow inherits SettingsCard {
     }
 }
 
-export component AboutContent inherits VerticalBox {
+export component AboutPage inherits VerticalBox {
     in property <string> version;
     in property <string> feedback;
     callback open-website();
@@ -38,7 +38,7 @@ export component AboutContent inherits VerticalBox {
         HorizontalBox {
             padding: 20px; spacing: 20px;
             Image {
-                source: @image-url("../assets/app-switcher.png");
+                source: @image-url("../../assets/app-switcher.png");
                 width: 52px; height: 52px; image-fit: contain;
             }
             VerticalBox {
@@ -53,12 +53,12 @@ export component AboutContent inherits VerticalBox {
     Text { text: "Support"; font-size: 14px; font-weight: 600; color: OmniTheme.text-primary; }
     Rectangle { height: 4px; }
     SupportRow {
-        glyph: ""; title: "Log folder"; description: "Open the folder containing application logs"; action: "Open";
+        glyph: "\u{e838}"; title: "Log folder"; description: "Open the folder containing application logs"; action: "Open";
         activated => { root.open-log-folder(); }
     }
-    SupportRow { glyph: ""; title: "Website"; activated => { root.open-website(); } }
+    SupportRow { glyph: "\u{e774}"; title: "Website"; activated => { root.open-website(); } }
     SupportRow {
-        glyph: ""; title: "Window diagnostics"; description: "Copy information about all open windows to the clipboard"; action: "Copy";
+        glyph: "\u{e77f}"; title: "Window diagnostics"; description: "Copy information about all open windows to the clipboard"; action: "Copy";
         activated => { root.copy-diagnostics(); }
     }
     if root.feedback != "" : Text {
@@ -80,7 +80,7 @@ export component AboutWindow inherits Window {
     default-font-family: "Segoe UI";
     VerticalBox {
         padding: 20px;
-        AboutContent {
+        AboutPage {
             version: root.version; feedback: root.feedback;
             open-website => { root.open-website(); }
             open-log-folder => { root.open-log-folder(); }

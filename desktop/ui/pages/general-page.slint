@@ -1,0 +1,60 @@
+import { ComboBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, TextLink } from "../theme.slint";
+import { Heading, SettingRow, SettingSwitch } from "../controls/setting-row.slint";
+import { ModifierKeyboard } from "../controls/modifier-keyboard.slint";
+
+export component GeneralPage inherits VerticalBox {
+    in-out property <int> theme;
+    in-out property <int> modifier;
+    in-out property <bool> dynamic-mode;
+    in-out property <bool> pulse-border;
+    in property <bool> pulse-supported: true;
+    in property <bool> startup-enabled;
+    in property <bool> startup-interactive;
+    callback edit();
+    callback toggle-startup(bool);
+    callback docs(string);
+
+    padding-left: 0px; padding-right: 12px; padding-top: 14px; padding-bottom: 20px;
+    spacing: 8px; alignment: start;
+
+    Heading { text: "Appearance"; }
+    SettingRow {
+        glyph: "\u{e790}"; label: "Theme"; description: "Choose the application color theme.";
+        ComboBox {
+            width: 205px; height: 36px;
+            model: ["System (follow Windows)", "Dark", "Light"];
+            current-index: root.theme;
+            selected => { root.theme = self.current-index; root.edit(); }
+        }
+    }
+    HorizontalBox {
+        padding: 0px;
+        Heading { text: "Modifier Key"; horizontal-stretch: 1; vertical-alignment: center; }
+        TextLink { label: "Learn more"; activated => { root.docs("choosing-modifier"); } }
+    }
+    ModifierKeyboard {
+        current-index: root.modifier;
+        selected(index) => { root.modifier = index; root.edit(); }
+    }
+    Heading { text: "Behavior"; }
+    SettingSwitch {
+        glyph: "\u{e770}"; label: "Dynamic mode";
+        description: "Automatically assign free letters to unpinned running applications.";
+        checked: root.dynamic-mode;
+        edited(value) => { root.dynamic-mode = value; root.edit(); }
+    }
+    SettingSwitch {
+        glyph: "\u{e7f4}"; label: "Start with Windows";
+        description: "Run OmniSpot in the background when Windows starts.";
+        checked: root.startup-enabled;
+        interactive: root.startup-interactive;
+        edited(value) => { root.toggle-startup(value); }
+    }
+    if root.pulse-supported : SettingSwitch {
+        glyph: "\u{e787}"; label: "Window border pulse";
+        description: "Briefly highlight the active window border on switch.";
+        checked: root.pulse-border;
+        edited(value) => { root.pulse-border = value; root.edit(); }
+    }
+}

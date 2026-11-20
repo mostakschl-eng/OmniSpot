@@ -1,0 +1,50 @@
+import { HorizontalBox, SpinBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme } from "../theme.slint";
+import { Heading, SettingRow, SettingSwitch } from "../controls/setting-row.slint";
+
+export component OverlayPage inherits VerticalBox {
+    in-out property <bool> overlay;
+    in-out property <int> overlay-delay;
+    in-out property <bool> overlay-keep-open;
+    callback preview-overlay(bool);
+    callback edit();
+
+    padding-left: 0px; padding-right: 12px; padding-top: 14px; padding-bottom: 20px;
+    spacing: 8px; alignment: start;
+
+    Heading { text: "App Switcher Overlay"; }
+    Text {
+        text: "The overlay switch previews immediately. Save & Apply keeps your choice.";
+        font-size: 12px; color: OmniTheme.text-secondary;
+    }
+    SettingSwitch {
+        glyph: "\u{e7c4}"; label: "Show overlay";
+        description: "Display a floating list of configured apps when the modifier key is held.";
+        checked: root.overlay;
+        edited(value) => { root.overlay = value; root.preview-overlay(value); root.edit(); }
+    }
+    SettingRow {
+        opacity: root.overlay ? 1.0 : 0.45;
+        glyph: "\u{e916}"; label: "Show delay";
+        description: "How long the modifier key must be held before the overlay appears.";
+        HorizontalBox {
+            padding: 0px; spacing: 6px; alignment: center;
+            SpinBox {
+                enabled: root.overlay;
+                width: 120px; height: 34px;
+                value: root.overlay-delay;
+                minimum: 0; maximum: 5000;
+                edited(value) => { root.overlay-delay = value; root.edit(); }
+            }
+            Text { text: "ms"; color: OmniTheme.text-secondary; vertical-alignment: center; font-size: 13px; }
+        }
+    }
+    SettingSwitch {
+        opacity: root.overlay ? 1.0 : 0.45;
+        glyph: "\u{e895}"; label: "Keep open while modifier is held";
+        description: "When enabled, the overlay stays open and refreshes after each app switch until the modifier key is released.";
+        interactive: root.overlay;
+        checked: root.overlay-keep-open;
+        edited(value) => { root.overlay-keep-open = value; root.edit(); }
+    }
+}

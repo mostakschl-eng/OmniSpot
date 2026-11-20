@@ -17,6 +17,7 @@ struct Windows {
     spotlight: Option<SpotlightWindow>,
     warning: Option<WarningOverlayWindow>,
     overlay_deadline: Option<Instant>,
+    spotlight_shown_at: Option<Instant>,
 }
 
 impl Windows {
@@ -36,15 +37,21 @@ impl Windows {
         if let Some(window) = &self.spotlight {
             if window.window().is_visible() {
                 window.hide()?;
+                self.spotlight_shown_at = None;
             } else {
                 window.set_query(Default::default());
                 window.invoke_search(Default::default());
+                if let Some(handle) = hwnd(window.window()) {
+                    desktop::hide_from_taskbar(handle, true);
+                }
                 place(window.window(), true);
                 window.show()?;
                 place(window.window(), true);
                 if let Some(handle) = hwnd(window.window()) {
+                    desktop::hide_from_taskbar(handle, true);
                     desktop::focus_window(handle);
                 }
+                self.spotlight_shown_at = Some(Instant::now());
             }
         }
         Ok(())
@@ -55,6 +62,7 @@ impl Windows {
         if let Some(spotlight) = self.spotlight.take() {
             let _ = spotlight.hide();
         }
+        self.spotlight_shown_at = None;
         self.overlay_deadline = None;
         self.config = config;
     }
@@ -90,11 +98,14 @@ fn show_overlay(
     };
     let overlay = floating::create_overlay(config)?;
     if let Some(handle) = hwnd(overlay.window()) {
-        desktop::set_passive_window(handle);
+        desktop::hide_from_taskbar(handle, false);
     }
     place(overlay.window(), false);
     overlay.show()?;
     place(overlay.window(), false);
+    if let Some(handle) = hwnd(overlay.window()) {
+        desktop::hide_from_taskbar(handle, false);
+    }
     windows.overlay = Some(overlay);
     Ok(())
 }
@@ -111,6 +122,7 @@ pub fn run(profile: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         spotlight: None,
         warning: None,
         overlay_deadline: None,
+        spotlight_shown_at: None,
     }));
     let state = windows.clone();
     let stats = stats_path.clone();
@@ -179,11 +191,14 @@ pub fn run(profile: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                             .global::<crate::OmniTheme>()
                             .set_requested_theme(windows.config.theme as i32);
                         if let Some(handle) = hwnd(warning.window()) {
-                            desktop::set_passive_window(handle);
+                            desktop::hide_from_taskbar(handle, false);
                         }
                         place(warning.window(), false);
                         warning.show()?;
                         place(warning.window(), false);
+                        if let Some(handle) = hwnd(warning.window()) {
+                            desktop::hide_from_taskbar(handle, false);
+                        }
                         windows.warning = Some(warning);
                         last_warning = Some(now);
                         Ok(())
@@ -219,6 +234,23 @@ pub fn run(profile: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 .as_ref()
                 .is_some_and(|window| window.window().is_visible()),
         );
+        if let Some(window) = &windows.spotlight {
+            if window.window().is_visible() {
+                if let Some(shown_at) = windows.spotlight_shown_at {
+                    if now.duration_since(shown_at) >= Duration::from_millis(350) {
+                        if let Some(handle) = hwnd(window.window()) {
+                            let foreground = desktop::foreground_window_handle();
+                            if foreground != 0 && foreground != handle {
+                                let _ = window.hide();
+                                windows.spotlight_shown_at = None;
+                            }
+                        }
+                    }
+                }
+            } else {
+                windows.spotlight_shown_at = None;
+            }
+        }
         if let Some(at) = last_warning {
             let progress = (1.0 - now.duration_since(at).as_secs_f32() / 5.0).max(0.0);
             if progress == 0.0 {

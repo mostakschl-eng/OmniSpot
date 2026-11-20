@@ -1,0 +1,43 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { KeyBadge, OmniTheme } from "../theme.slint";
+import { Heading, SettingRow, SettingSwitch } from "../controls/setting-row.slint";
+import { ModifierKeyboard } from "../controls/modifier-keyboard.slint";
+
+export component SpotlightPage inherits VerticalBox {
+    in-out property <bool> spotlight;
+    in-out property <int> spotlight-modifier;
+    in property <[string]> spotlight-folders;
+    callback add-folder();
+    callback remove-folder(int);
+    callback edit();
+
+    padding-left: 0px; padding-right: 12px; padding-top: 14px; padding-bottom: 20px;
+    spacing: 8px; alignment: start;
+
+    SettingSwitch {
+        glyph: "\u{e721}"; label: "Enable Spotlight Search";
+        description: "Quick search launcher for applications and Windows Search indexed files.";
+        checked: root.spotlight;
+        edited(value) => { root.spotlight = value; root.edit(); }
+    }
+    Heading { text: "Activation Shortcut (Modifier + Space bar)"; }
+    ModifierKeyboard {
+        current-index: root.spotlight-modifier; interactive: root.spotlight;
+        selected(index) => { root.spotlight-modifier = index; root.edit(); }
+    }
+    Heading { text: "Standard Indexed Locations"; }
+    SettingRow {
+        glyph: "\u{e8b7}"; label: "Automatic Library & System Indexing";
+        description: "Applications, Desktop, Documents, Downloads, Videos, Music, Pictures";
+        KeyBadge { width: 66px; height: 30px; label: root.spotlight ? "✓ Active" : "Inactive"; label-size: 11px; }
+    }
+    Heading { text: "Custom Search Folders"; }
+    SettingRow {
+        glyph: "\u{e8f4}"; label: "Add Custom Folders"; description: "Index additional folders to include them in search.";
+        Button { text: "Add Folder..."; height: 32px; clicked => { root.add-folder(); } }
+    }
+    for item[index] in root.spotlight-folders : SettingRow {
+        glyph: "\u{e8b7}"; label: item; description: "Custom user directory";
+        Button { text: "Remove"; height: 30px; clicked => { root.remove-folder(index); } }
+    }
+}
