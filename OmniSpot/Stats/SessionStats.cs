@@ -16,10 +16,7 @@ internal sealed class SessionStats
     public event Action? DataChanged;
 
     public void LoadFrom(DailyBucketDocument document) => _rustStatsBackend.LoadToday(document);
-
     public void Clear() => _rustStatsBackend.ClearSession();
-
-    public void ClearRollover() => _rustStatsBackend.ClearRollover();
 
     public IReadOnlyList<DailyBucketDocument> GetSnapshots() => _rustStatsBackend.GetSnapshots();
 }

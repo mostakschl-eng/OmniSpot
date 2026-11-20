@@ -1,12 +1,12 @@
 using System.Runtime.InteropServices;
 using System.IO;
-using System.Text;
+using OmniSpot.WindowDiscovery;
 using System.Text.Json;
 
 namespace OmniSpot;
 
 /// <summary>FFI adapter for native process inspection.</summary>
-internal sealed class RustProcessInspectorBackend
+internal sealed class RustProcessInspectorBackend : IProcessInspector
 {
     private const string LibraryName = "omnispot_spotlight_native";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -14,8 +14,8 @@ internal sealed class RustProcessInspectorBackend
     public bool NeedsElevation(uint processId) => Invoke<bool>("needsElevation", processId: processId);
     public bool IsWindowsExecutable(string path) => Invoke<bool>("isWindowsExecutable", path: path);
     public string GetProcessDisplayName(string path) => Invoke<string>("displayName", path: path) ?? Path.GetFileNameWithoutExtension(path);
-    public Task<bool> WaitForPotentialElevation(string path, int timeoutMs) =>
-        Task.Run(() => Invoke<bool>("waitForPotentialElevation", path: path, timeoutMs: timeoutMs));
+    public Task<bool> WaitForPotentialElevation(string processPath, int timeoutMs = 2000) =>
+        Task.Run(() => Invoke<bool>("waitForPotentialElevation", path: processPath, timeoutMs: timeoutMs));
 
     private static T? Invoke<T>(string operation, string? path = null, uint? processId = null, int? timeoutMs = null)
     {

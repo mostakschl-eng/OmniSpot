@@ -3,7 +3,7 @@ using OmniSpot.Stats;
 using OmniSpot.Stats.Storage;
 using OmniSpot.WindowDiscovery;
 using AwesomeAssertions;
-using LiteDB;
+using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.Windows.Input;
@@ -12,15 +12,19 @@ using AppConfig = OmniSpot.Configuration.Configuration;
 
 namespace OmniSpot.Tests.Stats;
 
+[Collection("Rust app registry")]
 public class AppRegistryCacheTests : IDisposable
 {
-    private readonly LiteDatabase _db = new(":memory:");
+    private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("omnispot-registry-test-");
+    private readonly RustDatabase _db;
     private readonly IWindowEnumerator _windowEnumerator = Substitute.For<IWindowEnumerator>();
     private readonly RustAppRegistryBackend _rust = new();
     private readonly AppRegistryCache _sut;
 
     public AppRegistryCacheTests()
     {
+        _db = new RustDatabase(Path.Combine(_directory.FullName, "settings.sqlite3"));
+        _db.Initialize([]);
         _windowEnumerator.GetWindows().Returns([]);
         _rust.Initialize([]);
         _sut = new AppRegistryCache(
@@ -30,7 +34,7 @@ public class AppRegistryCacheTests : IDisposable
             _rust);
     }
 
-    public void Dispose() => _db.Dispose();
+    public void Dispose() => _directory.Delete(recursive: true);
 
     private static AppConfig EmptyConfig() =>
         new(Modifier: Key.RightCtrl,
@@ -88,7 +92,7 @@ public class AppRegistryCacheTests : IDisposable
         _db.SeedDatabase("notepad.exe", "Notepad");
         _sut.Prepopulate(EmptyConfig());
 
-        _db.DropCollection(AppRegistryDocument.CollectionName);
+        _db.Clear(AppRegistryDocument.CollectionName);
 
         var result = _sut.GetDisplayName("notepad.exe");
 
@@ -107,7 +111,7 @@ public class AppRegistryCacheTests : IDisposable
     }
 
     [Fact]
-    public void TryAdd_PersistsEntryToLiteDb_OnCacheMiss()
+    public void TryAdd_PersistsEntryToSqlite_OnCacheMiss()
     {
         _sut.TryAdd("notepad.exe", "notepad.exe");
 
@@ -119,7 +123,7 @@ public class AppRegistryCacheTests : IDisposable
     // ── Prepopulate ───────────────────────────────────────────────────────────
 
     [Fact]
-    public void Prepopulate_SeedsCache_FromLiteDb()
+    public void Prepopulate_SeedsCache_FromSqlite()
     {
         _db.SeedDatabase("notepad.exe", "Notepad");
 
@@ -175,7 +179,7 @@ public class AppRegistryCacheTests : IDisposable
     }
 
     [Fact]
-    public void Prepopulate_PersistsNewWindowEntry_ToLiteDb()
+    public void Prepopulate_PersistsNewWindowEntry_ToSqlite()
     {
         _windowEnumerator.GetWindows().Returns([MakeWindow(@"C:\notepad.exe")]);
 
@@ -189,12 +193,10 @@ public class AppRegistryCacheTests : IDisposable
 
 file static class Extensions
 {
-    private static ILiteCollection<AppRegistryDocument> Collection(this LiteDatabase db) =>
-        db.GetCollection<AppRegistryDocument>(AppRegistryDocument.CollectionName);
+    public static AppRegistryDocument? FindByProcessName(this RustDatabase db, string processName) =>
+        db.Read<AppRegistryDocument>(AppRegistryDocument.CollectionName, processName).SingleOrDefault();
 
-    public static AppRegistryDocument? FindByProcessName(this LiteDatabase db, string processName) =>
-        db.Collection().FindById(processName);
-
-    public static void SeedDatabase(this LiteDatabase db, string processName, string displayName) => db.Collection()
-        .Insert(new AppRegistryDocument { ProcessName = processName, DisplayName = displayName });
+    public static void SeedDatabase(this RustDatabase db, string processName, string displayName) =>
+        db.Write([new(AppRegistryDocument.CollectionName, processName,
+            new AppRegistryDocument { ProcessName = processName, DisplayName = displayName })]);
 }

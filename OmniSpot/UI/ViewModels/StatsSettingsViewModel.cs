@@ -20,12 +20,12 @@ internal partial class StatsSettingsViewModel(
     ISettingsState state,
     ILogger<StatsSettingsViewModel> logger,
     SessionStats sessionStats,
-    StatsRepository statsRepository,
+    StatsDbProvider statsDbProvider,
     AppRegistryCache appRegistryCache,
     IconExtractor iconExtractor,
     IContentDialogService dialogService,
-    StatsDbProvider statsDbProvider,
-    StatsCalculator statsCalculator)
+    StatsService statsService,
+    RustStatsBackend rustStatsBackend)
     : ObservableObject
 {
     public ISettingsState State { get; } = state;
@@ -152,7 +152,7 @@ internal partial class StatsSettingsViewModel(
 
         lock (_historicBucketsCacheLock)
         {
-            _historicBucketsCache ??= statsRepository.GetAllHistoricBuckets();
+            _historicBucketsCache ??= ReadHistory();
             return _historicBucketsCache;
         }
     }
@@ -192,8 +192,7 @@ internal partial class StatsSettingsViewModel(
         {
             try
             {
-                statsDbProvider.Delete();
-                sessionStats.Clear();
+                statsService.Reset();
                 _historicBucketsCache = null;
                 await RefreshCommand.ExecuteAsync(null);
             }
@@ -247,6 +246,19 @@ internal partial class StatsSettingsViewModel(
 
     // ── Computation ───────────────────────────────────────────────────────────
 
+    private IReadOnlyList<DailyBucketDocument> ReadHistory()
+    {
+        try
+        {
+            return statsDbProvider.OpenExisting()?.ReadStatsHistory(DateOnly.FromDateTime(DateTime.Today)) ?? [];
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to load historical stats from database");
+            return [];
+        }
+    }
+
     private StatsMetrics ComputeMetrics()
     {
         using var _ = logger.MeasureTime($"ComputeStatsMetrics(IsCached = {_historicBucketsCache is not null})");
@@ -258,7 +270,7 @@ internal partial class StatsSettingsViewModel(
             .Select(a => (a.ProcessName, a.Key))
             .ToList();
 
-        var metrics = statsCalculator.Compute(allBuckets, today, configuredApps);
+        var metrics = rustStatsBackend.Calculate(allBuckets, today, configuredApps, appRegistryCache);
 
         return metrics;
     }

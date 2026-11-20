@@ -1,19 +1,21 @@
-using LiteDB;
 using System.IO;
 
 namespace OmniSpot.Stats.Storage;
 
-public class StatsDbProvider(string dbPath, Func<ILiteDatabase> factory)
+internal sealed class StatsDbProvider(string directory)
 {
-    /// <summary>
-    /// Gets a fresh database each time it's called
-    /// </summary>
-    public ILiteDatabase Get() => factory();
+    private readonly RustDatabase _database = new(Path.Combine(directory, "stats.sqlite3"));
+    private readonly string _legacyPath = Path.Combine(directory, "stats.db");
 
-    public bool Exists() => File.Exists(dbPath);
-
-    public void Delete()
+    public RustDatabase? OpenExisting()
     {
-        File.Delete(dbPath);
+        if (_database.IsReady()) return _database;
+        return LegacyDatabaseImport.Exists(_legacyPath) ? OpenOrCreate() : null;
+    }
+
+    public RustDatabase OpenOrCreate()
+    {
+        LegacyDatabaseImport.Stats(_database, _legacyPath);
+        return _database;
     }
 }

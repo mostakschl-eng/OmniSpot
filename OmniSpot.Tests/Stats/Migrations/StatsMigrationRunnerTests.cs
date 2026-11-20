@@ -1,10 +1,7 @@
-using System.IO;
 using OmniSpot.Configuration.Storage;
 using OmniSpot.Stats.Migrations;
-using OmniSpot.Stats.Storage;
 using AwesomeAssertions;
 using LiteDB;
-using LiteDB.Engine;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -12,24 +9,12 @@ namespace OmniSpot.Tests.Stats.Migrations;
 
 public class StatsMigrationRunnerTests : IDisposable
 {
-    private readonly LiteDatabase _db;
-    private readonly StatsDbProvider _dbProvider;
-
-    public StatsMigrationRunnerTests()
-    {
-        _db = new LiteDatabase(":memory:");
-
-        // StatsMigrationRunner disposes the ILiteDatabase returned by the factory (using var db = ...).
-        // Wrap _db in a non-disposing shell so the test can still query it after RunPending() returns.
-        // StatsDbProvider.Exists() checks File.Exists — pass the test assembly path so it returns true.
-        var existingPath = typeof(StatsMigrationRunnerTests).Assembly.Location;
-        _dbProvider = new StatsDbProvider(existingPath, () => new NonDisposingWrapper(_db));
-    }
+    private readonly LiteDatabase _db = new(":memory:");
 
     public void Dispose() => _db.Dispose();
 
     private StatsMigrationRunner BuildRunner(params IStatsMigration[] migrations) =>
-        new(_dbProvider, migrations, NullLogger<StatsMigrationRunner>.Instance);
+        new(migrations, NullLogger<StatsMigrationRunner>.Instance);
 
     // ── RunPending ─────────────────────────────────────────────────────────────
 
@@ -38,7 +23,7 @@ public class StatsMigrationRunnerTests : IDisposable
     {
         var sut = BuildRunner();
 
-        var result = sut.RunPending();
+        var result = sut.RunPending(_db);
 
         result.Should().BeTrue();
     }
@@ -49,7 +34,7 @@ public class StatsMigrationRunnerTests : IDisposable
         var migration = new FakeMigration(version: 1);
         var sut = BuildRunner(migration);
 
-        sut.RunPending();
+        sut.RunPending(_db);
 
         migration.WasRun.Should().BeTrue();
     }
@@ -59,10 +44,10 @@ public class StatsMigrationRunnerTests : IDisposable
     {
         var migration = new FakeMigration(version: 1);
         var sut = BuildRunner(migration);
-        sut.RunPending();
+        sut.RunPending(_db);
 
         // Run again — migration must be skipped because version was recorded
-        sut.RunPending();
+        sut.RunPending(_db);
 
         migration.RunCount.Should().Be(1);
     }
@@ -71,12 +56,12 @@ public class StatsMigrationRunnerTests : IDisposable
     public void RunPending_DoesNotRecordVersion_WhenMigrationThrows()
     {
         var failing = new FakeMigration(version: 1, throws: true);
-        BuildRunner(failing).RunPending();
+        BuildRunner(failing).RunPending(_db);
 
         // Run again with a non-throwing migration of the same version —
         // it must run again because the failed run should not have recorded the version
         var retry = new FakeMigration(version: 1);
-        BuildRunner(retry).RunPending();
+        BuildRunner(retry).RunPending(_db);
 
         retry.WasRun.Should().BeTrue();
     }
@@ -89,7 +74,7 @@ public class StatsMigrationRunnerTests : IDisposable
            .Insert(new MigrationRecord { Version = 1, ExecutedAt = DateTime.UtcNow });
 
         var migration = new FakeMigration(version: 1);
-        BuildRunner(migration).RunPending();
+        BuildRunner(migration).RunPending(_db);
 
         migration.WasRun.Should().BeFalse();
     }
@@ -103,7 +88,7 @@ public class StatsMigrationRunnerTests : IDisposable
         var m2 = new FakeMigration(version: 2, onRun: () => order.Add(2));
         var sut = BuildRunner(m3, m1, m2);
 
-        sut.RunPending();
+        sut.RunPending(_db);
 
         order.Should().Equal(1, 2, 3);
     }
@@ -113,7 +98,7 @@ public class StatsMigrationRunnerTests : IDisposable
     {
         var sut = BuildRunner(new FakeMigration(1), new FakeMigration(2));
 
-        var result = sut.RunPending();
+        var result = sut.RunPending(_db);
 
         result.Should().BeTrue();
     }
@@ -123,7 +108,7 @@ public class StatsMigrationRunnerTests : IDisposable
     {
         var sut = BuildRunner(new FakeMigration(version: 1, throws: true));
 
-        var result = sut.RunPending();
+        var result = sut.RunPending(_db);
 
         result.Should().BeFalse();
     }
@@ -133,26 +118,9 @@ public class StatsMigrationRunnerTests : IDisposable
     {
         var m1 = new FakeMigration(version: 1, throws: true);
         var m2 = new FakeMigration(version: 2);
-        BuildRunner(m1, m2).RunPending();
+        BuildRunner(m1, m2).RunPending(_db);
 
         m2.WasRun.Should().BeFalse();
-    }
-
-    [Fact]
-    public void RunPending_ReturnsTrue_WhenDbDoesNotExist()
-    {
-        var nonExistentProvider = new StatsDbProvider(
-            @"C:\does\not\exist\stats.db",
-            () => throw new InvalidOperationException("Should not open DB"));
-
-        var sut = new StatsMigrationRunner(
-            nonExistentProvider,
-            [new FakeMigration(1)],
-            NullLogger<StatsMigrationRunner>.Instance);
-
-        var result = sut.RunPending();
-
-        result.Should().BeTrue();
     }
 
     // ── Fakes ──────────────────────────────────────────────────────────────────
@@ -170,43 +138,5 @@ public class StatsMigrationRunnerTests : IDisposable
             if (throws)
                 throw new InvalidOperationException("Simulated migration failure");
         }
-    }
-
-    /// <summary>
-    /// Delegates all ILiteDatabase calls to the inner instance but ignores Dispose(),
-    /// allowing the test to keep querying the in-memory DB after RunPending() returns.
-    /// </summary>
-    private sealed class NonDisposingWrapper(ILiteDatabase inner) : ILiteDatabase
-    {
-        public void Dispose() { /* intentionally no-op */ }
-
-        public BsonMapper Mapper => inner.Mapper;
-        public ILiteStorage<string> FileStorage => inner.FileStorage;
-        public int UserVersion { get => inner.UserVersion; set => inner.UserVersion = value; }
-        public TimeSpan Timeout { get => inner.Timeout; set => inner.Timeout = value; }
-        public bool UtcDate { get => inner.UtcDate; set => inner.UtcDate = value; }
-        public long LimitSize { get => inner.LimitSize; set => inner.LimitSize = value; }
-        public int CheckpointSize { get => inner.CheckpointSize; set => inner.CheckpointSize = value; }
-        public Collation Collation => inner.Collation;
-
-        public ILiteCollection<BsonDocument> GetCollection(string name, BsonAutoId autoId = BsonAutoId.ObjectId) => inner.GetCollection(name, autoId);
-        public ILiteCollection<T> GetCollection<T>() => inner.GetCollection<T>();
-        public ILiteCollection<T> GetCollection<T>(BsonAutoId autoId = BsonAutoId.ObjectId) => inner.GetCollection<T>(autoId);
-        public ILiteCollection<T> GetCollection<T>(string name, BsonAutoId autoId = BsonAutoId.ObjectId) => inner.GetCollection<T>(name, autoId);
-        public bool BeginTrans() => inner.BeginTrans();
-        public bool Commit() => inner.Commit();
-        public bool Rollback() => inner.Rollback();
-        public ILiteStorage<TFileId> GetStorage<TFileId>(string filesCollection = "_files", string chunksCollection = "_chunks") => inner.GetStorage<TFileId>(filesCollection, chunksCollection);
-        public IEnumerable<string> GetCollectionNames() => inner.GetCollectionNames();
-        public bool CollectionExists(string name) => inner.CollectionExists(name);
-        public bool DropCollection(string name) => inner.DropCollection(name);
-        public bool RenameCollection(string oldName, string newName) => inner.RenameCollection(oldName, newName);
-        public IBsonDataReader Execute(TextReader commandReader, BsonDocument? parameters = null) => inner.Execute(commandReader, parameters);
-        public IBsonDataReader Execute(string command, BsonDocument? parameters = null) => inner.Execute(command, parameters);
-        public IBsonDataReader Execute(string command, params BsonValue[] args) => inner.Execute(command, args);
-        public void Checkpoint() => inner.Checkpoint();
-        public long Rebuild(RebuildOptions? options = null) => inner.Rebuild(options);
-        public BsonValue Pragma(string name) => inner.Pragma(name);
-        public BsonValue Pragma(string name, BsonValue value) => inner.Pragma(name, value);
     }
 }

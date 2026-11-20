@@ -43,5 +43,5 @@ internal static class RustCliParser
 
     private sealed record Request(string[] Args, string[] Commands, string[] Flags, string[] ValuedOptions);
     internal sealed record ParseResult(string Status, string? Command, bool Debug, bool Trace, string? Error,
-        string[] MatchedFlags, string[][] ValuedValues);
+        string[] MatchedFlags, string[][] ValuedValues, string[] UnknownArguments);
 }

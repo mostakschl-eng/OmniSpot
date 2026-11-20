@@ -1,4 +1,4 @@
-using LiteDB;
+using OmniSpot.UI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OmniSpot.CLI;
@@ -79,7 +79,7 @@ public partial class App
         var cliOptions = _serviceProvider.GetRequiredService<CliOptions>();
         SetupLogging(cliOptions, logger);
 
-        var configManager = _serviceProvider.GetRequiredService<ConfigurationManager>();
+        var configManager = _serviceProvider.GetRequiredService<SettingsBridge>();
         var config = configManager.GetConfiguration();
         if (config == null)
         {
@@ -163,7 +163,6 @@ public partial class App
         _statsService?.Dispose();
         // This has to be disposed manually because service was created manually
         // https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection/guidelines#services-not-created-by-the-service-container
-        _serviceProvider?.GetRequiredService<LiteDatabase>().Dispose();
 
         (_serviceProvider as IDisposable)?.Dispose();
 #if !DEBUG

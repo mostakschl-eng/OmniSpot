@@ -1,6 +1,5 @@
 using OmniSpot.Configuration;
-using LiteDB;
-using Microsoft.Extensions.Logging.Abstractions;
+using System.IO;
 using System.Windows.Input;
 using Xunit;
 using AwesomeAssertions;
@@ -10,8 +9,8 @@ namespace OmniSpot.Tests.Configuration;
 
 public class ConfigurationServiceTests : IDisposable
 {
-    private readonly LiteDatabase _db = new(":memory:");
-    private readonly ConfigurationService _sut;
+    private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("omnispot-settings-test-");
+    private readonly RustDatabase _sut;
 
     private static AppConfig MakeConfig(
         Key modifier = Key.RightCtrl,
@@ -41,15 +40,16 @@ public class ConfigurationServiceTests : IDisposable
 
     public ConfigurationServiceTests()
     {
-        _sut = new ConfigurationService(_db, NullLogger<ConfigurationService>.Instance);
+        _sut = new RustDatabase(Path.Combine(_directory.FullName, "settings.sqlite3"));
+        _sut.Initialize([]);
     }
 
-    public void Dispose() => _db.Dispose();
+    public void Dispose() => _directory.Delete(recursive: true);
 
     [Fact]
     public void ReadConfiguration_ReturnsDefaults_WhenNoDatabaseRecordExists()
     {
-        var result = _sut.ReadConfiguration();
+        var result = _sut.LoadSettings(sanitize: false).Configuration;
 
         result.Should().BeEquivalentTo(new AppConfig(
             Modifier: Key.RightCtrl,
@@ -70,8 +70,8 @@ public class ConfigurationServiceTests : IDisposable
         var app = new ApplicationConfiguration(Key.N, @"C:\Windows\notepad.exe", CycleMode.Hide, false);
         var config = MakeConfig(applications: [app]);
 
-        _sut.WriteConfiguration(config);
-        var result = _sut.ReadConfiguration();
+        _sut.SaveSettings(config);
+        var result = _sut.LoadSettings(sanitize: false).Configuration;
 
         result.Should().BeEquivalentTo(config);
     }
@@ -82,9 +82,9 @@ public class ConfigurationServiceTests : IDisposable
         var first = MakeConfig();
         var second = first with { Modifier = Key.RightAlt, Theme = AppThemeSetting.Dark };
 
-        _sut.WriteConfiguration(first);
-        _sut.WriteConfiguration(second);
-        var result = _sut.ReadConfiguration();
+        _sut.SaveSettings(first);
+        _sut.SaveSettings(second);
+        var result = _sut.LoadSettings(sanitize: false).Configuration;
 
         result.Should().BeEquivalentTo(second);
     }
@@ -100,8 +100,8 @@ public class ConfigurationServiceTests : IDisposable
         };
         var config = MakeConfig(applications: apps);
 
-        _sut.WriteConfiguration(config);
-        var result = _sut.ReadConfiguration();
+        _sut.SaveSettings(config);
+        var result = _sut.LoadSettings(sanitize: false).Configuration;
 
         result.Applications.Should().BeEquivalentTo(apps);
     }

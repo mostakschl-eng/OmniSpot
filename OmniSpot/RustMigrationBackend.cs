@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace OmniSpot;
 
-/// <summary>Runs migration version selection and ordering in Rust; storage transactions remain in LiteDB adapters.</summary>
+/// <summary>Runs legacy migration version selection and ordering in Rust.</summary>
 internal static class RustMigrationBackend
 {
     private const string LibraryName = "omnispot_spotlight_native";

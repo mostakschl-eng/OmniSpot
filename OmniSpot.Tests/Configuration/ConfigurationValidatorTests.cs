@@ -1,5 +1,4 @@
 using OmniSpot.Configuration;
-using Microsoft.Extensions.Logging.Abstractions;
 using System.IO;
 using System.Windows.Input;
 using Xunit;
@@ -10,7 +9,6 @@ namespace OmniSpot.Tests.Configuration;
 
 public class ConfigurationValidatorTests
 {
-    private readonly ConfigurationValidator _sut = new(NullLogger<ConfigurationValidator>.Instance);
 
     private static AppConfig MakeConfig(Key modifier, params ApplicationConfiguration[] apps) =>
         new(modifier, [.. apps], true, AppThemeSetting.System, true, 1000, true, false, false, true);
@@ -24,7 +22,7 @@ public class ConfigurationValidatorTests
     [Fact]
     public void ValidateAndLog_ReturnsSuccess_WhenNoApplicationsConfigured()
     {
-        var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl));
+        var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl));
 
         result.Status.Should().Be(ValidationResultStatus.Success);
     }
@@ -41,7 +39,7 @@ public class ConfigurationValidatorTests
     [InlineData(Key.Capital)]
     public void ValidateAndLog_ReturnsSuccess_ForEachValidModifier(Key modifier)
     {
-        var result = _sut.ValidateAndLog(MakeConfig(modifier));
+        var result = RustConfigurationBackend.Validate(MakeConfig(modifier));
 
         result.Status.Should().Be(ValidationResultStatus.Success);
     }
@@ -55,7 +53,7 @@ public class ConfigurationValidatorTests
     [InlineData(Key.Return)]
     public void ValidateAndLog_ReturnsError_WhenModifierIsNotInAllowedSet(Key modifier)
     {
-        var result = _sut.ValidateAndLog(MakeConfig(modifier));
+        var result = RustConfigurationBackend.Validate(MakeConfig(modifier));
 
         result.Status.Should().Be(ValidationResultStatus.Error);
         result.Message.Should().Contain("Invalid modifier key");
@@ -66,7 +64,7 @@ public class ConfigurationValidatorTests
     [InlineData("   ")]
     public void ValidateAndLog_ReturnsError_WhenProcessPathIsEmpty(string processPath)
     {
-        var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl, MakeApp(Key.A, processPath)));
+        var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl, MakeApp(Key.A, processPath)));
 
         result.Status.Should().Be(ValidationResultStatus.Error);
         result.Message.Should().Contain("process path missing or invalid");
@@ -75,7 +73,7 @@ public class ConfigurationValidatorTests
     [Fact]
     public void ValidateAndLog_ReturnsError_WhenProcessFileDoesNotExist()
     {
-        var result = _sut.ValidateAndLog(
+        var result = RustConfigurationBackend.Validate(
             MakeConfig(Key.LeftCtrl, MakeApp(Key.A, @"C:\nonexistent\fake_app_12345.exe")));
 
         result.Status.Should().Be(ValidationResultStatus.Error);
@@ -93,7 +91,7 @@ public class ConfigurationValidatorTests
         var tempFile = Path.GetTempFileName();
         try
         {
-            var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl, MakeApp(key, tempFile)));
+            var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl, MakeApp(key, tempFile)));
 
             result.Status.Should().Be(ValidationResultStatus.Error);
             result.Message.Should().Contain("single letter");
@@ -113,7 +111,7 @@ public class ConfigurationValidatorTests
         var tempFile = Path.GetTempFileName();
         try
         {
-            var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl, MakeApp(key, tempFile)));
+            var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl, MakeApp(key, tempFile)));
 
             result.Status.Should().Be(ValidationResultStatus.Success);
         }
@@ -129,7 +127,7 @@ public class ConfigurationValidatorTests
         var tempFile = Path.GetTempFileName();
         try
         {
-            var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl, MakeApp(Key.D1, tempFile)));
+            var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl, MakeApp(Key.D1, tempFile)));
 
             result.Process.Should().Be(Path.GetFileName(tempFile));
         }
@@ -143,7 +141,7 @@ public class ConfigurationValidatorTests
     public void ValidateAndLog_ReturnsFirstError_WhenMultipleAppsAreInvalid()
     {
         // Validation is short-circuit: returns on first error found
-        var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl,
+        var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl,
             MakeApp(Key.A, "A"),
             MakeApp(Key.B, "B")));
 
@@ -157,7 +155,7 @@ public class ConfigurationValidatorTests
     {
         var app = MakePackagedApp(Key.T, "WindowsTerminal.exe", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App");
 
-        var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl, app));
+        var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl, app));
 
         result.Status.Should().Be(ValidationResultStatus.Success);
     }
@@ -170,7 +168,7 @@ public class ConfigurationValidatorTests
     {
         var app = MakePackagedApp(Key.T, "WindowsTerminal.exe", aumid);
 
-        var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl, app));
+        var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl, app));
 
         result.Status.Should().Be(ValidationResultStatus.Error);
         result.Message.Should().Contain("AUMID");
@@ -181,7 +179,7 @@ public class ConfigurationValidatorTests
     {
         var app = MakePackagedApp(Key.T, "C:\\WindowsTerminal.exe", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App");
 
-        var result = _sut.ValidateAndLog(MakeConfig(Key.LeftCtrl, app));
+        var result = RustConfigurationBackend.Validate(MakeConfig(Key.LeftCtrl, app));
 
         result.Status.Should().Be(ValidationResultStatus.Success);
     }
@@ -196,7 +194,7 @@ public class ConfigurationValidatorTests
             SpotlightEnabled: true,
             SpotlightModifier: Key.A);
 
-        var result = _sut.ValidateAndLog(config);
+        var result = RustConfigurationBackend.Validate(config);
 
         result.Status.Should().Be(ValidationResultStatus.Error);
         result.Message.Should().Contain("Invalid spotlight modifier key");

@@ -1,17 +1,15 @@
-using LiteDB;
+using OmniSpot.UI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using NLog.Extensions.Logging;
 using OmniSpot.CLI;
 using OmniSpot.Configuration;
-using OmniSpot.Configuration.Migrations;
 using OmniSpot.Extensions;
 using OmniSpot.Input;
 using OmniSpot.Overlay;
 using OmniSpot.Spotlight;
 using OmniSpot.Startup;
 using OmniSpot.Stats;
-using OmniSpot.Stats.Migrations;
 using OmniSpot.Stats.Storage;
 using OmniSpot.UI.Pages;
 using OmniSpot.UI.ViewModels;
@@ -40,46 +38,33 @@ internal static class ServicesConfiguration
             return null;
         }
 
-        services.AddSingleton(TimeProvider.System);
         services.AddTransient<INavigationViewPageProvider, PageProviderService>();
         services.AddSingleton<ISnackbarService, SnackbarService>();
         services.AddSingleton<IContentDialogService, ContentDialogService>();
 
-        services.AddTransient<ConfigurationService>();
-        services.AddTransient<ConfigurationValidator>();
         services.AddTransient<ApplicationsValidator>();
-        services.AddTransient<PackagedAppPathSanitizer>();
-        services.AddTransient<MigrationRunner>();
-        services.AddImplementationsOf<IMigration>(ServiceLifetime.Transient);
-        services.AddSingleton<ConfigurationManager>();
+        services.AddSingleton<SettingsBridge>();
         services.AddSingleton<Hook>();
         services.AddSingleton<RustHookBackend>();
         services.AddSingleton<DynamicModeService>();
         services.AddSingleton<IAppNameResolver, AppNameResolver>();
-        services.AddTransient<Switcher>();
         services.AddTransient<AutoStart>();
         services.AddSingleton<IconExtractor>();
         services.AddTransient<OverlayShowTimer>();
         services.AddTransient<RunningApplicationsService>();
-        services.AddTransient<IPackagedAppsService, PackagedAppsService>();
+        services.AddSingleton<IPackagedAppsService, RustPackagedAppsBackend>();
         services.AddSingleton<IWindowEnumerator, WindowEnumerator>();
         services.AddTransient<WindowTitleParser>();
         services.AddTransient<AppOverlayService>();
         services.AddSingleton<WarningOverlayService>();
-        services.AddTransient<IProcessInspector, ProcessInspector>();
+        services.AddSingleton<IProcessInspector, RustProcessInspectorBackend>();
 
         services.AddSingleton<RustStatsBackend>();
-        services.AddSingleton<RustPackagedAppsBackend>();
-        services.AddSingleton<RustProcessInspectorBackend>();
         services.AddSingleton<RustAppRegistryBackend>();
         services.AddSingleton<SessionStats>();
         services.AddSingleton<AppRegistryCache>();
         services.AddSingleton<IAppRegistryCache>(sp => sp.GetRequiredService<AppRegistryCache>());
         services.AddSingleton<StatsService>();
-        services.AddTransient<StatsRepository>();
-        services.AddTransient<StatsCalculator>();
-        services.AddTransient<StatsMigrationRunner>();
-        services.AddImplementationsOf<IStatsMigration>(ServiceLifetime.Transient);
 
         services.AddCliHandler();
 
@@ -118,32 +103,26 @@ internal static class ServicesConfiguration
 
     private static bool SetupDatabases(this ServiceCollection services, bool isPortableMode)
     {
-        BsonMapper.Global.EnumAsInteger = true;
-        BsonMapper.Global.RegisterType<DateOnly>(
-            serialize: d => d.ToString("yyyy-MM-dd"),
-            deserialize: bson => DateOnly.ParseExact(bson.AsString, "yyyy-MM-dd"));
-
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var mainDbPath = GetDbPath("settings.db");
-        var statsDbPath = GetDbPath("stats.db");
+        var directory = isPortableMode ? AppContext.BaseDirectory : Path.Combine(appData, "OmniSpot");
+        var settingsPath = Path.Combine(directory, "settings.sqlite3");
 
         try
         {
-            var mainDb = new LiteDatabase(new ConnectionString(mainDbPath) { Connection = ConnectionType.Direct });
-            services.AddSingleton(mainDb);
-
-            // stats db is lazy loaded so that when user has it disabled stats.db file will not appear until it's enabled again
-            services.AddSingleton(new StatsDbProvider(statsDbPath, () =>
-                new LiteDatabase(new ConnectionString(statsDbPath) { Connection = ConnectionType.Direct })));
+            var settings = new RustDatabase(settingsPath);
+            LegacyDatabaseImport.Settings(settings, Path.Combine(directory, "settings.db"),
+                new RustPackagedAppsBackend());
+            services.AddSingleton(settings);
+            services.AddSingleton(new StatsDbProvider(directory));
 
             return true;
         }
-        catch (Exception)
+        catch (Exception error)
         {
             new MessageBox
             {
                 Title = "Database error",
-                Content = $"An error occurred while reading the settings.\nFile might be corrupted. Please remove it and start over.\n\nPath:\n{mainDbPath}",
+                Content = $"Could not open or migrate the settings database.\n\n{settingsPath}\n{error.Message}",
                 CloseButtonIcon = new SymbolIcon(SymbolRegular.ErrorCircle24),
                 CloseButtonText = "Quit",
                 CloseButtonAppearance = ControlAppearance.Danger,
@@ -151,12 +130,6 @@ internal static class ServicesConfiguration
             return false;
         }
 
-        string GetDbPath(string name)
-        {
-            return isPortableMode
-                ? Path.Combine(AppContext.BaseDirectory, name)
-                : Path.Combine(appData, "OmniSpot", name);
-        }
     }
 
     private static void AddImplementationsOf<TInterface>(this IServiceCollection services, ServiceLifetime lifetime,

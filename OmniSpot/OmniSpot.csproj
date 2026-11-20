@@ -23,9 +23,13 @@
     <DebugType>embedded</DebugType>
   </PropertyGroup>
 
-  <Target Name="BuildSpotlightNative" BeforeTargets="Build" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipSpotlightNativeBuild)' != 'true'">
-    <Exec Command="cargo build --release --manifest-path &quot;$(MSBuildProjectDirectory)\Spotlight\Native\Cargo.toml&quot;" WorkingDirectory="$(MSBuildProjectDirectory)\Spotlight\Native" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\Spotlight\Native\target\release\omnispot_spotlight_native.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  <PropertyGroup>
+    <OmniSpotRustTarget>x86_64-pc-windows-msvc</OmniSpotRustTarget>
+    <OmniSpotRustTarget Condition="'$(RuntimeIdentifier)' == 'win-x86' Or ('$(RuntimeIdentifier)' == '' And '$(PlatformTarget)' == 'x86')">i686-pc-windows-msvc</OmniSpotRustTarget>
+  </PropertyGroup>
+
+  <Target Name="BuildSpotlightNative" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipSpotlightNativeBuild)' != 'true'">
+    <Exec Command="cargo build --release --manifest-path Cargo.toml --target-dir target --target $(OmniSpotRustTarget)" WorkingDirectory="$(MSBuildProjectDirectory)\.." />
   </Target>
 
   <ItemGroup>
@@ -90,7 +94,7 @@
     <None Update="nlog.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="Spotlight\Native\target\release\omnispot_spotlight_native.dll">
+    <None Include="..\target\$(OmniSpotRustTarget)\release\omnispot_spotlight_native.dll">
       <Link>omnispot_spotlight_native.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

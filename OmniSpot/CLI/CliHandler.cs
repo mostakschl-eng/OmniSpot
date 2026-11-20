@@ -16,6 +16,9 @@ internal class CliHandler(
     public bool Handle(string[] args)
     {
         var parsed = RustCliParser.Parse(args, builder);
+        foreach (var unknown in parsed.UnknownArguments)
+            logger.LogWarning("Unknown argument: {Arg}", unknown);
+
         foreach (var flag in parsed.MatchedFlags)
         {
             var option = builder.FlagOptions.FirstOrDefault(o => o.Name == flag);

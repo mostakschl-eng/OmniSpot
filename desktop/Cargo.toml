@@ -1,0 +1,15 @@
+[package]
+name = "omnispot-desktop"
+version = "1.0.2"
+edition = "2021"
+publish = false
+
+[dependencies]
+omnispot-spotlight-native = { path = ".." }
+slint = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-software", "accessibility", "system-tray", "raw-window-handle-06"] }
+clipboard-win = "5"
+raw-window-handle = "0.6"
+
+[build-dependencies]
+embed-resource = "3.0.12"
+slint-build = "=1.19.0"

@@ -1,3 +1,4 @@
+using OmniSpot.UI;
 using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration;
 using OmniSpot.UI.ViewModels;
@@ -9,7 +10,7 @@ namespace OmniSpot.Spotlight;
 internal class SpotlightService(
     SpotlightWindow window,
     SpotlightViewModel viewModel,
-    ConfigurationManager configurationManager,
+    SettingsBridge configurationManager,
     ILogger<SpotlightService> logger)
 {
     public bool IsVisible => window.IsVisible;

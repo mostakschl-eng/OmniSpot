@@ -1,3 +1,4 @@
+using OmniSpot.UI;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using OmniSpot.Configuration;
@@ -14,7 +15,7 @@ namespace OmniSpot.UI.ViewModels.Common;
 internal partial class SettingsState : ObservableObject, ISettingsState, IDisposable
 {
     private readonly AutoStart _autoStart;
-    private readonly ConfigurationManager _configurationManager;
+    private readonly SettingsBridge _configurationManager;
     private readonly IconExtractor _iconExtractor;
     private readonly IPackagedAppsService _packagedAppsService;
     private readonly ILogger<SettingsState> _logger;
@@ -206,7 +207,7 @@ internal partial class SettingsState : ObservableObject, ISettingsState, IDispos
 
     public string? ValidationSummary { get; private set; }
 
-    public SettingsState(AutoStart autoStart, ConfigurationManager configurationManager,
+    public SettingsState(AutoStart autoStart, SettingsBridge configurationManager,
         IconExtractor iconExtractor, IPackagedAppsService packagedAppsService, ILogger<SettingsState> logger,
         ApplicationsValidator validator, DynamicModeService dynamicModeService, IWindowEnumerator windowEnumerator,
         AppRegistryCache appRegistryCache)

@@ -1,5 +1,5 @@
+using System.IO;
 using AwesomeAssertions;
-using LiteDB;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using OmniSpot.Configuration;
@@ -14,6 +14,7 @@ using AppConfig = OmniSpot.Configuration.Configuration;
 
 namespace OmniSpot.Tests.Stats;
 
+[Collection("Rust app registry")]
 public class RustStatsBackendTests
 {
     [Theory]
@@ -51,7 +52,8 @@ public class RustStatsBackendTests
     [Fact]
     public void Calculate_ReturnsMetricsFromRustBackend()
     {
-        using var db = new LiteDatabase(":memory:");
+        using var temp = new TestDatabase();
+        var db = temp.Database;
         var windows = Substitute.For<IWindowEnumerator>();
         windows.GetWindows().Returns([]);
         var registry = new AppRegistryCache(db, windows, NullLogger<AppRegistryCache>.Instance,
@@ -75,6 +77,24 @@ public class RustStatsBackendTests
 
         rust.IsWindowsExecutable(path).Should().BeTrue();
         rust.GetProcessDisplayName(path).Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void NativeStorage_FlushesRestoresAndResetsTheSession()
+    {
+        using var temp = new TestDatabase();
+        var backend = new RustStatsBackend();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        backend.LoadToday(new DailyBucketDocument { Date = today, TotalSwitches = 23 });
+
+        temp.Database.FlushStats().Should().Be(1);
+        backend.ClearSession();
+        temp.Database.RestoreStats(today);
+        backend.GetSnapshots().Should().ContainSingle().Which.TotalSwitches.Should().Be(23);
+
+        temp.Database.ResetStats();
+        backend.GetSnapshots().Last().TotalSwitches.Should().Be(0);
+        temp.Database.ReadStatsHistory(today.AddDays(1)).Should().BeEmpty();
     }
 
     [Fact]
@@ -126,5 +146,18 @@ public class RustStatsBackendTests
         session.GetSnapshots().Last().StaticAppUsage["queued-rust-test.exe"].Switches.Should().Be(1);
         changed.Should().BeTrue();
         backend.IsRunning.Should().BeFalse();
+    }
+    private sealed class TestDatabase : IDisposable
+    {
+        private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("omnispot-stats-test-");
+        public RustDatabase Database { get; }
+
+        public TestDatabase()
+        {
+            Database = new RustDatabase(Path.Combine(_directory.FullName, "settings.sqlite3"));
+            Database.Initialize([]);
+        }
+
+        public void Dispose() => _directory.Delete(recursive: true);
     }
 }

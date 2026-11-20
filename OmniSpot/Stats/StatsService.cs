@@ -1,16 +1,14 @@
 using Microsoft.Extensions.Logging;
-using OmniSpot.Stats.Migrations;
 using OmniSpot.Stats.Storage;
 using AppConfig = OmniSpot.Configuration.Configuration;
 
 namespace OmniSpot.Stats;
 
-/// <summary>Managed lifecycle and LiteDB adapter for the Rust stats runtime.</summary>
+/// <summary>Managed lifecycle and persistence adapter for the Rust stats runtime.</summary>
 internal sealed class StatsService(
     SessionStats sessionStats,
     AppRegistryCache registryCache,
     StatsDbProvider dbProvider,
-    StatsMigrationRunner statsMigrationRunner,
     RustStatsBackend rustStatsBackend,
     ILogger<StatsService> logger) : IDisposable
 {
@@ -46,13 +44,12 @@ internal sealed class StatsService(
     {
         if (statsEnabled && !_storagePrepared)
         {
-            if (!statsMigrationRunner.RunPending())
+            try { LoadTodaysBucket(); }
+            catch (Exception ex)
             {
-                logger.LogError("Stats DB migrations failed — stats collection not started");
+                logger.LogError(ex, "Failed to prepare the stats database");
                 return;
             }
-
-            LoadTodaysBucket();
             rustStatsBackend.SetFlushCallback(() => Flush("Rust five-minute timer"));
             _storagePrepared = true;
         }
@@ -60,7 +57,7 @@ internal sealed class StatsService(
         if (!statsEnabled) logger.LogInformation("Stats collection is disabled");
         if (rustStatsBackend.ApplyConfiguration(statsEnabled))
         {
-            // Rust drains and joins its worker before the LiteDB snapshot is persisted.
+            // Rust drains and joins its worker before the stats snapshot is persisted.
             PersistSnapshots(reason);
             logger.LogInformation("Stats collection stopped");
         }
@@ -81,21 +78,9 @@ internal sealed class StatsService(
         _flushLock.Wait();
         try
         {
+            var count = dbProvider.OpenOrCreate().FlushStats();
+            logger.LogDebug("Flushed {Count} stats buckets (reason={Reason})", count, reason);
             registryCache.PersistNativeEntries();
-            using var database = dbProvider.Get();
-            var collection = database.GetCollection<DailyBucketDocument>(DailyBucketDocument.CollectionName);
-            var snapshots = sessionStats.GetSnapshots();
-            foreach (var snapshot in snapshots)
-            {
-                if (snapshot.Date == default)
-                {
-                    logger.LogWarning("Skipping stats flush for a snapshot without a date (reason={Reason})", reason);
-                    continue;
-                }
-                collection.Upsert(snapshot);
-                logger.LogDebug("Stats flushed for {Date} (reason={Reason})", snapshot.Date.ToString("yyyy-MM-dd"), reason);
-            }
-            if (snapshots.Count > 1) sessionStats.ClearRollover();
         }
         catch (Exception ex)
         {
@@ -104,21 +89,19 @@ internal sealed class StatsService(
         finally { _flushLock.Release(); }
     }
 
-    private void LoadTodaysBucket()
+    public void Reset()
     {
+        _flushLock.Wait();
         try
         {
-            if (!dbProvider.Exists()) return;
-            using var database = dbProvider.Get();
-            var today = DateOnly.FromDateTime(DateTime.Today);
-            var collection = database.GetCollection<DailyBucketDocument>(DailyBucketDocument.CollectionName);
-            var existing = collection.FindOne(bucket => bucket.Date == today);
-            if (existing is not null)
-            {
-                sessionStats.LoadFrom(existing);
-                logger.LogDebug("Loaded existing stats for {Date}", today.ToString("yyyy-MM-dd"));
-            }
+            if (dbProvider.OpenExisting() is { } database) database.ResetStats();
+            else sessionStats.Clear();
         }
-        catch (Exception ex) { logger.LogError(ex, "Error loading today's stats bucket from database"); }
+        finally { _flushLock.Release(); }
+    }
+
+    private void LoadTodaysBucket()
+    {
+        dbProvider.OpenExisting()?.RestoreStats(DateOnly.FromDateTime(DateTime.Today));
     }
 }

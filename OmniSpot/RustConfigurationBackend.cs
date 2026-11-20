@@ -134,7 +134,14 @@ internal static class RustConfigurationBackend
         (uint)app.Key, app.ProcessPath, app.CycleMode.ToString(), app.StartIfNotRunning,
         app.Type.ToString(), app.Aumid);
 
-    private static OmniSpot.Configuration.Configuration FromNative(NativeConfiguration result) => new(
+    internal static NativeConfiguration ToNativeConfiguration(OmniSpot.Configuration.Configuration config) =>
+        new((uint)config.Modifier, config.Applications.Select(ToNative).ToArray(),
+            config.PulseBorderEnabled, config.Theme.ToString(), config.OverlayEnabled, config.OverlayShowDelayMs,
+            config.OverlayKeepOpenWhileModifierHeld, config.PeekEnabled, config.DynamicModeEnabled,
+            config.StatsEnabled, config.SpotlightEnabled, (uint)config.SpotlightModifier,
+            config.SpotlightCustomDirectories?.ToArray());
+
+    internal static OmniSpot.Configuration.Configuration FromNative(NativeConfiguration result) => new(
         (System.Windows.Input.Key)result.Modifier,
         result.Applications.Select(app => new ApplicationConfiguration((System.Windows.Input.Key)app.Key,
             app.ProcessPath, Enum.Parse<CycleMode>(app.CycleMode), app.StartIfNotRunning,
@@ -196,10 +203,10 @@ internal static class RustConfigurationBackend
         bool PulseBorderEnabled, string Theme, bool OverlayEnabled, int OverlayShowDelayMs,
         bool OverlayKeepOpenWhileModifierHeld, bool PeekEnabled, bool DynamicModeEnabled, bool StatsEnabled,
         bool SpotlightEnabled, uint SpotlightModifier, string[]? SpotlightCustomDirectories);
-    private sealed record NativeApplication(uint Key, string ProcessPath, string CycleMode,
+    internal sealed record NativeApplication(uint Key, string ProcessPath, string CycleMode,
         bool StartIfNotRunning, string ApplicationType, string? Aumid);
     private sealed record NativeValidationResult(string Status, string? Process, string? Message);
-    private sealed record NativeConfiguration(uint Modifier, NativeApplication[] Applications, bool PulseBorderEnabled,
+    internal sealed record NativeConfiguration(uint Modifier, NativeApplication[] Applications, bool PulseBorderEnabled,
         string Theme, bool OverlayEnabled, int OverlayShowDelayMs, bool OverlayKeepOpenWhileModifierHeld,
         bool PeekEnabled, bool DynamicModeEnabled, bool StatsEnabled, bool SpotlightEnabled,
         uint SpotlightModifier, string[]? SpotlightCustomDirectories);

@@ -1,6 +1,3 @@
-using Microsoft.Extensions.Logging;
-using OmniSpot.Configuration;
-
 namespace OmniSpot.WindowDiscovery;
 
 internal interface IWindowEnumerator
@@ -15,25 +12,8 @@ internal interface IWindowEnumerator
     ApplicationWindow? GetCurrentWindow();
 
     /// <summary>
-    /// This is strictly for the Modifier + Digit functionality
-    /// This will get all visible windows for currently focused app if it's configured as NextWindow cycle mode
-    /// </summary>
-    /// <param name="allWindows">All visible windows to check</param>
-    /// <param name="applications">All configured applications</param>
-    /// <returns>maximum of 10 windows with stable ordering</returns>
-    WindowEnumerator.FocusedAppWindows GetFocusedAppWindows(
-        IReadOnlyList<ApplicationWindow> allWindows,
-        IReadOnlyList<ApplicationConfiguration> applications);
-
-    void LogWindows(LogLevel level, IEnumerable<ApplicationWindow> result);
-    /// <summary>
     /// Gets all windows including windows irrelevant (IsValidWindow = false) for OmniSpot
     /// </summary>
     List<ApplicationWindow> GetAllWindows();
     void LogAllWindows();
-
-    /// <summary>
-    /// Returns the count of all unique app choices using the cached window list.
-    /// </summary>
-    int GetTotalChoicesCount();
 }

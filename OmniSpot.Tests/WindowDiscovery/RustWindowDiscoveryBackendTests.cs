@@ -8,6 +8,16 @@ namespace OmniSpot.Tests.WindowDiscovery;
 public class RustWindowDiscoveryBackendTests
 {
     [Fact]
+    public void MissingForegroundWindow_IsAValidNullResponse()
+    {
+        RustWindowDiscoveryBackend.DecodeJson<RustWindowDiscoveryBackend.RustWindow>(
+            "null"u8, allowNull: true).Should().BeNull();
+
+        Action readWindowList = () => RustWindowDiscoveryBackend.DecodeJson<RustWindowDiscoveryBackend.RustWindow[]>("null"u8);
+        readWindowList.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public void GetRunningApplications_ReturnsEmpty_WhenNoWindowsWereDiscovered()
     {
         var results = RustWindowDiscoveryBackend.GetRunningApplications(

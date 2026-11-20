@@ -1,3 +1,4 @@
+using OmniSpot.UI;
 using OmniSpot.Configuration;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -11,11 +12,11 @@ internal sealed class RustSearchBackend
     private const string LibraryName = "omnispot_spotlight_native";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly Lazy<bool> NativeAvailable = new(IsNativeAvailable);
-    private readonly ConfigurationManager? _configManager;
+    private readonly SettingsBridge? _configManager;
     private readonly Lazy<Task> _indexInitialization;
     private readonly string _persistencePath;
 
-    public RustSearchBackend(ConfigurationManager? configManager = null)
+    public RustSearchBackend(SettingsBridge? configManager = null)
     {
         _configManager = configManager;
         _indexInitialization = new Lazy<Task>(InitializeIndexAsync, LazyThreadSafetyMode.ExecutionAndPublication);

@@ -1,4 +1,3 @@
-using LiteDB;
 using Microsoft.Extensions.Logging;
 using OmniSpot.Extensions;
 using OmniSpot.Stats.Storage;
@@ -6,9 +5,9 @@ using OmniSpot.WindowDiscovery;
 
 namespace OmniSpot.Stats;
 
-/// <summary>LiteDB persistence adapter for Rust-owned app display-name caching and resolution.</summary>
+/// <summary>Persistence adapter for Rust-owned app display-name caching and resolution.</summary>
 internal sealed class AppRegistryCache(
-    LiteDatabase database,
+    RustDatabase database,
     IWindowEnumerator windowEnumerator,
     ILogger<AppRegistryCache> logger,
     RustAppRegistryBackend rustAppRegistryBackend) : IAppRegistryCache
@@ -17,8 +16,7 @@ internal sealed class AppRegistryCache(
     {
         using var _ = logger.MeasureTime("Prepopulating app registry entries");
         var windows = windowEnumerator.GetWindows();
-        var collection = database.GetCollection<AppRegistryDocument>(AppRegistryDocument.CollectionName);
-        rustAppRegistryBackend.Initialize(collection.FindAll().ToList());
+        rustAppRegistryBackend.Initialize(database.Read<AppRegistryDocument>(AppRegistryDocument.CollectionName));
 
         foreach (var window in windows)
         {
@@ -46,25 +44,16 @@ internal sealed class AppRegistryCache(
 
     internal void PersistNativeEntries()
     {
-        foreach (var entry in rustAppRegistryBackend.GetEntries())
-        {
-            PersistToRegistry(entry.ProcessName, entry.DisplayName);
-        }
+        database.Write(rustAppRegistryBackend.GetEntries().Select(entry =>
+            new RustDatabase.Row(AppRegistryDocument.CollectionName, entry.ProcessName, entry)), overwrite: false);
     }
 
     private void PersistToRegistry(string processName, string displayName)
     {
         try
         {
-            var collection = database.GetCollection<AppRegistryDocument>(AppRegistryDocument.CollectionName);
-            if (collection.FindById(processName) is null)
-            {
-                collection.Insert(new AppRegistryDocument
-                {
-                    ProcessName = processName,
-                    DisplayName = displayName
-                });
-            }
+            var entry = new AppRegistryDocument { ProcessName = processName, DisplayName = displayName };
+            database.Write([new(AppRegistryDocument.CollectionName, processName, entry)], overwrite: false);
         }
         catch (Exception ex)
         {

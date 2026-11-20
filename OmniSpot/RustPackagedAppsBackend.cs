@@ -1,12 +1,11 @@
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.Json;
 using OmniSpot.WindowDiscovery;
 
 namespace OmniSpot;
 
 /// <summary>Thin FFI adapter for native package discovery and identity lookups.</summary>
-internal sealed class RustPackagedAppsBackend
+internal sealed class RustPackagedAppsBackend : IPackagedAppsService
 {
     private const string LibraryName = "omnispot_spotlight_native";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

@@ -1,3 +1,4 @@
+using LiteDB;
 using Microsoft.Extensions.Logging;
 using OmniSpot;
 using OmniSpot.Configuration.Storage;
@@ -6,21 +7,13 @@ using OmniSpot.Stats.Storage;
 namespace OmniSpot.Stats.Migrations;
 
 internal class StatsMigrationRunner(
-    StatsDbProvider dbProvider,
     IEnumerable<IStatsMigration> migrations,
     ILogger<StatsMigrationRunner> logger)
 {
     private const string CollectionName = "_migrations";
 
-    public bool RunPending()
+    public bool RunPending(ILiteDatabase db)
     {
-        if (!dbProvider.Exists())
-        {
-            logger.LogDebug("Stats DB does not exist — skipping migrations");
-            return true;
-        }
-
-        using var db = dbProvider.Get();
         var collection = db.GetCollection<MigrationRecord>(CollectionName);
         var executedVersions = collection.FindAll().Select(r => r.Version).ToHashSet();
 

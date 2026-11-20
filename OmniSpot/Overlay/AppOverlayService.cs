@@ -23,7 +23,6 @@ internal class AppOverlayService(
     WindowTitleParser windowTitleParser,
     DynamicModeService dynamicModeService,
     IPackagedAppsService packagedAppsService,
-    Switcher switcher,
     ILogger<AppOverlayService> logger)
 {
     private record WindowSnapshot(ApplicationWindow Window, string Title, bool IsActive = false);
@@ -215,12 +214,12 @@ internal class AppOverlayService(
                 var currentWindow = windowEnumerator.GetWindows().FirstOrDefault(w => w.Handle == new HWND(selectedHandle));
                 if (currentWindow is not null)
                 {
-                    switcher.ActivateWindow(currentWindow, pulseBorder: false);
+                    RustSwitcherBackend.ActivateWindow(currentWindow);
                 }
             }
             else if (item.Application is { } app)
             {
-                switcher.Open(app);
+                RustSwitcherBackend.Open(app);
             }
         }
         catch (Exception e)

@@ -10,3 +10,5 @@ internal interface IPackagedAppsService
     string? GetDisplayName(string installPath);
     IReadOnlyList<(string Name, string Path, string? Aumid, string? IconPath)> GetSearchableApps();
 }
+
+public sealed record PackagedAppInfo(string Aumid, string? IconPath);

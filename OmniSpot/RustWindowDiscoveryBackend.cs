@@ -1,4 +1,3 @@
-using OmniSpot.Configuration;
 using OmniSpot.WindowDiscovery;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -29,20 +28,7 @@ internal static class RustWindowDiscoveryBackend
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, JsonOptions));
         UIntPtr length = UIntPtr.Zero;
         var pointer = NativeGetRunningApps(bytes, (UIntPtr)bytes.Length, ref length);
-        return ReadJson<RustRunningApplication[]>(pointer, length);
-    }
-
-    public static WindowEnumerator.FocusedAppWindows GetFocusedWindows(
-        IReadOnlyList<ApplicationWindow> windows, IReadOnlyList<ApplicationConfiguration> applications)
-    {
-        var request = new FocusedRequest(windows.Select(ToNative).ToArray(), applications.Select(ToNative).ToArray());
-        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, JsonOptions));
-        UIntPtr length = UIntPtr.Zero;
-        var pointer = NativeGetFocused(bytes, (UIntPtr)bytes.Length, ref length);
-        var response = ReadJson<FocusedResponse>(pointer, length);
-        return new WindowEnumerator.FocusedAppWindows(
-            response.FocusedWindow is { } focused ? FromNative(focused) : null,
-            response.AllWindows.Select(FromNative).ToList());
+        return ReadJson<RustRunningApplication[]>(pointer, length)!;
     }
 
     // A pair keeps the native allocation length attached until it is freed.
@@ -57,32 +43,35 @@ internal static class RustWindowDiscoveryBackend
     private static List<ApplicationWindow> ReadArray(NativeRead call)
     {
         var (pointer, length) = Read(call);
-        return ReadJson<RustWindow[]>(pointer, length).Select(FromNative).ToList();
+        return ReadJson<RustWindow[]>(pointer, length)!.Select(FromNative).ToList();
     }
 
     private static ApplicationWindow? ReadOne(NativeRead call)
     {
         var (pointer, length) = Read(call);
-        var result = ReadJson<RustWindow?>(pointer, length);
+        var result = ReadJson<RustWindow>(pointer, length, allowNull: true);
         return result is null ? null : FromNative(result);
     }
 
-    private static T ReadJson<T>(IntPtr pointer, UIntPtr length)
+    private static T? ReadJson<T>(IntPtr pointer, UIntPtr length, bool allowNull = false) where T : class
     {
         if (pointer == IntPtr.Zero) throw new InvalidOperationException("Rust window discovery returned no response.");
         try
         {
             var bytes = new byte[checked((int)length.ToUInt64())];
             Marshal.Copy(pointer, bytes, 0, bytes.Length);
-            return JsonSerializer.Deserialize<T>(bytes, JsonOptions)
-                ?? throw new InvalidOperationException("Rust window discovery returned invalid data.");
+            return DecodeJson<T>(bytes, allowNull);
         }
         finally { NativeFree(pointer, length); }
     }
 
-    private static NativeApplication ToNative(ApplicationConfiguration app) => new(
-        (uint)app.Key, app.ProcessPath, app.CycleMode.ToString(), app.StartIfNotRunning,
-        app.Type == ApplicationType.Packaged ? "Packaged" : "Win32", app.Aumid);
+    internal static T? DecodeJson<T>(ReadOnlySpan<byte> json, bool allowNull = false) where T : class
+    {
+        var result = JsonSerializer.Deserialize<T>(json, JsonOptions);
+        if (result is null && !allowNull)
+            throw new InvalidOperationException("Rust window discovery returned invalid data.");
+        return result;
+    }
 
     internal static RustWindow ToNative(ApplicationWindow w) => new(
         RustSwitcherBackend.ToInt64(w.Handle), w.Title, w.ProcessId, w.ProcessImagePath, (uint)w.State,
@@ -102,20 +91,14 @@ internal static class RustWindowDiscoveryBackend
     private static extern IntPtr NativeGetCached(ref UIntPtr outputLength);
     [DllImport(LibraryName, EntryPoint = "omnispot_windows_get_current", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr NativeGetCurrent(ref UIntPtr outputLength);
-    [DllImport(LibraryName, EntryPoint = "omnispot_windows_get_focused", CallingConvention = CallingConvention.Cdecl)]
-    private static extern IntPtr NativeGetFocused(byte[] request, UIntPtr requestLength, ref UIntPtr outputLength);
     [DllImport(LibraryName, EntryPoint = "omnispot_running_apps", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr NativeGetRunningApps(byte[] request, UIntPtr requestLength, ref UIntPtr outputLength);
     [DllImport(LibraryName, EntryPoint = "omnispot_spotlight_free", CallingConvention = CallingConvention.Cdecl)]
     private static extern void NativeFree(IntPtr pointer, UIntPtr length);
 
     private delegate IntPtr NativeRead(ref UIntPtr outputLength);
-    private sealed record FocusedRequest(RustWindow[] Windows, NativeApplication[] Applications);
-    private sealed record FocusedResponse(RustWindow? FocusedWindow, RustWindow[] AllWindows);
     internal sealed record RustRunningApplication(uint ProcessId, string ProcessName, string ProcessImagePath, bool IsPackagedApp);
     private sealed record RunningAppsRequest(RustWindow[] Windows, string[] ExcludedProcessNames, string[] Packages);
-    private sealed record NativeApplication(uint Key, string ProcessPath, string CycleMode,
-        bool StartIfNotRunning, string ApplicationType, string? Aumid);
     internal sealed record RustWindow(long Handle, string? Title, uint ProcessId, string ProcessImagePath,
         uint State, int X, int Y, int Width, int Height, uint Style, uint StyleEx, bool IsCloaked, bool NeedsElevation);
 }

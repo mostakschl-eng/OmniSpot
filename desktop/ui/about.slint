@@ -1,0 +1,91 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, SettingsCard, Symbol, TextLink } from "theme.slint";
+
+component SupportRow inherits SettingsCard {
+    in property <string> glyph;
+    in property <string> title;
+    in property <string> description;
+    in property <string> action;
+    callback activated();
+    HorizontalBox {
+        padding-left: 20px; padding-right: 20px; padding-top: 10px; padding-bottom: 10px;
+        spacing: 16px;
+        Symbol { width: 22px; text: root.glyph; font-size: 20px; }
+        VerticalBox {
+            padding: 0px; spacing: 2px; horizontal-stretch: 1;
+            Text { text: root.title; color: OmniTheme.text-primary; font-size: 14px; }
+            if root.description != "" : Text {
+                text: root.description; color: OmniTheme.text-secondary; font-size: 12px; wrap: word-wrap;
+            }
+            if root.action == "" : TextLink {
+                label: "https://app-switcher.com";
+                activated => { root.activated(); }
+            }
+        }
+        if root.action != "" : Button { text: root.action; height: 32px; clicked => { root.activated(); } }
+    }
+}
+
+export component AboutContent inherits VerticalBox {
+    in property <string> version;
+    in property <string> feedback;
+    callback open-website();
+    callback open-log-folder();
+    callback copy-diagnostics();
+    padding: 0px; spacing: 4px;
+
+    SettingsCard {
+        HorizontalBox {
+            padding: 20px; spacing: 20px;
+            Image {
+                source: @image-url("../../OmniSpot/Resources/app-switcher.png");
+                width: 52px; height: 52px; image-fit: contain;
+            }
+            VerticalBox {
+                padding: 0px; spacing: 4px; alignment: center; horizontal-stretch: 1;
+                Text { text: "OmniSpot"; font-size: 20px; font-weight: 600; color: OmniTheme.text-primary; }
+                Text { text: "Version " + root.version; font-size: 14px; color: OmniTheme.text-secondary; }
+                Text { text: "Rust / Slint"; font-size: 14px; color: OmniTheme.text-secondary; }
+            }
+        }
+    }
+    Rectangle { height: 8px; }
+    Text { text: "Support"; font-size: 14px; font-weight: 600; color: OmniTheme.text-primary; }
+    Rectangle { height: 4px; }
+    SupportRow {
+        glyph: ""; title: "Log folder"; description: "Open the folder containing application logs"; action: "Open";
+        activated => { root.open-log-folder(); }
+    }
+    SupportRow { glyph: ""; title: "Website"; activated => { root.open-website(); } }
+    SupportRow {
+        glyph: ""; title: "Window diagnostics"; description: "Copy information about all open windows to the clipboard"; action: "Copy";
+        activated => { root.copy-diagnostics(); }
+    }
+    if root.feedback != "" : Text {
+        text: root.feedback; color: OmniTheme.text-secondary; font-size: 13px; wrap: word-wrap;
+    }
+}
+
+export component AboutWindow inherits Window {
+    in property <string> version;
+    in property <string> feedback;
+    callback open-website();
+    callback open-log-folder();
+    callback copy-diagnostics();
+    title: "About OmniSpot";
+    min-width: 450px;
+    preferred-width: 620px;
+    preferred-height: 370px;
+    background: OmniTheme.window-background;
+    default-font-family: "Segoe UI";
+    VerticalBox {
+        padding: 20px;
+        AboutContent {
+            version: root.version; feedback: root.feedback;
+            open-website => { root.open-website(); }
+            open-log-folder => { root.open-log-folder(); }
+            copy-diagnostics => { root.copy-diagnostics(); }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+}

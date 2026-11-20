@@ -18,7 +18,7 @@ internal sealed class AppUsageStats(int switches = 0, int peeks = 0, int totalPe
     public int TotalSwitchTimeMs { get; init; } = totalSwitchTimeMs;
 }
 
-/// <summary>LiteDB transfer document; stat mutations are owned by Rust.</summary>
+/// <summary>Persisted daily bucket; stat mutations are owned by Rust.</summary>
 internal sealed class DailyBucketDocument
 {
     public const string CollectionName = "daily_buckets";

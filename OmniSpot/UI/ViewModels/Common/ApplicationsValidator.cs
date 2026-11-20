@@ -7,7 +7,7 @@ internal record ApplicationValidationError(
     IReadOnlyList<ApplicationShortcutViewModel> AffectedApps,
     string Message);
 
-internal class ApplicationsValidator(ConfigurationValidator configValidator)
+internal class ApplicationsValidator
 {
     public IReadOnlyList<ApplicationValidationError> Validate(
         IReadOnlyList<ApplicationShortcutViewModel> applications)
@@ -22,7 +22,7 @@ internal class ApplicationsValidator(ConfigurationValidator configValidator)
                 continue;
             }
 
-            var result = configValidator.ValidateApplication(app);
+            var result = RustConfigurationBackend.ValidateApplication(app);
             if (result.IsError)
             {
                 errors.Add(new ApplicationValidationError([app], result.Message));

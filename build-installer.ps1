@@ -2,7 +2,8 @@
 param (
     [string]$Version = "1.0.0",
     [switch]$SelfContained,
-    [switch]$All
+    [switch]$All,
+    [switch]$Slint
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,7 +65,14 @@ function Build-Package {
     }
 }
 
-if ($All) {
+if ($Slint) {
+    $rustTarget = Join-Path $PSScriptRoot 'target\desktop'
+    cargo build --locked --release --manifest-path "$PSScriptRoot\desktop\Cargo.toml" --target-dir $rustTarget
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $rustExe = Join-Path $rustTarget 'release\omnispot-desktop.exe'
+    & $isccPath "/DAppVersion=$Version" '/DProfileName=slint' "/DRustExe=$rustExe" "$PSScriptRoot\OmniSpot\installer.iss"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} elseif ($All) {
     Build-Package -Profile "folder" -Ver $Version
     Build-Package -Profile "selfcontained" -Ver $Version
 } elseif ($SelfContained) {

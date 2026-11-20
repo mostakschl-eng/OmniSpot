@@ -13,16 +13,20 @@ AppVerName=OmniSpot {#AppVersion}
 DefaultDirName={autopf}\OmniSpot
 DefaultGroupName=OmniSpot
 UninstallDisplayIcon={app}\OmniSpot.exe
+SetupIconFile=app-switcher.ico
 Compression=lzma2
 SolidCompression=yes
 OutputDir=Inno_Files
 #if ProfileName == "selfcontained"
   OutputBaseFilename=OmniSpot SelfContained Installer
+#elif ProfileName == "slint"
+  OutputBaseFilename=OmniSpot Rust Installer
 #else
   OutputBaseFilename=OmniSpot Installer
 #endif
 PrivilegesRequired=lowest
 AppMutex=OmniSpotMutex
+ArchitecturesAllowed=x64compatible
 CloseApplications=yes
 RestartApplications=yes
 
@@ -30,7 +34,11 @@ RestartApplications=yes
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "bin\publish\{#PublishFolder}\*"; DestDir: "{app}"; Excludes: ".portable,*.db,*.db-*,logs\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+#if ProfileName == "slint"
+Source: "{#RustExe}"; DestDir: "{app}"; DestName: "OmniSpot.exe"; Flags: ignoreversion
+#else
+Source: "bin\publish\{#PublishFolder}\*"; DestDir: "{app}"; Excludes: ".portable,*.db,*.db-*,*.sqlite3,*.sqlite3-*,logs\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 
 [Dirs]
 Name: "{userappdata}\OmniSpot"; Flags: uninsneveruninstall
@@ -80,7 +88,7 @@ var
   IsSelfContained: Boolean;
 begin
   Result := False;
-  IsSelfContained := '{#ProfileName}' = 'selfcontained';
+  IsSelfContained := ('{#ProfileName}' = 'selfcontained') or ('{#ProfileName}' = 'slint');
   if IsSelfContained then
   begin
     Result := True;

@@ -1,7 +1,6 @@
 using OmniSpot.Configuration;
 using OmniSpot.WindowDiscovery;
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.IO;
 using System.Windows.Input;
@@ -21,13 +20,11 @@ public class PackagedAppPathSanitizerTests : IDisposable
 
     private readonly IPackagedAppsService _packagedAppsService = Substitute.For<IPackagedAppsService>();
     private readonly string _tempDirectory = Path.Combine(Path.GetTempPath(), $"OmniSpotTests_{Guid.NewGuid():N}");
-    private readonly PackagedAppPathSanitizer _sut;
 
     public PackagedAppPathSanitizerTests()
     {
         _packagedAppsService.GetInstalledPathByAumid(ClaudeAumid).Returns(NewClaudePackage);
         _packagedAppsService.GetByPackageFamilyName(ClaudeFamilyName).Returns(new PackagedAppInfo(ClaudeAumid, null));
-        _sut = new PackagedAppPathSanitizer(_packagedAppsService, NullLogger<PackagedAppPathSanitizer>.Instance);
     }
 
     public void Dispose()
@@ -61,7 +58,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
     {
         var config = ConfigWith(PackagedApp($@"{StaleClaudePackage}\app\Claude.exe"));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result!.Applications.Single().ProcessPath.Should().Be($@"{NewClaudePackage}\app\Claude.exe");
     }
@@ -71,7 +68,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
     {
         var config = ConfigWith(PackagedApp($@"{StaleClaudePackage}\Claude.exe"));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result!.Applications.Single().ProcessPath.Should().Be($@"{NewClaudePackage}\Claude.exe");
     }
@@ -81,7 +78,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
     {
         var config = ConfigWith(PackagedApp(@"D:\WindowsApps\Claude_0.0.1.0_x64__pzs8sxrjxfjjc\app\Claude.exe"));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result!.Applications.Single().ProcessPath.Should().Be($@"{NewClaudePackage}\Claude.exe");
     }
@@ -92,7 +89,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
         _packagedAppsService.GetInstalledPathByAumid(ClaudeAumid).Returns((string?)null);
         var config = ConfigWith(PackagedApp($@"{StaleClaudePackage}\app\Claude.exe"));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result.Should().BeNull();
     }
@@ -103,7 +100,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
         var config = ConfigWith(new ApplicationConfiguration(Key.N, @"C:\missing\notepad.exe", CycleMode.NextApp,
             StartIfNotRunning: false));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result.Should().BeNull();
     }
@@ -115,7 +112,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
     {
         var config = ConfigWith(Win32App($@"{StaleClaudePackage}\app\claude.exe"));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result!.Applications.Single().Should().Be(
             PackagedApp($@"{NewClaudePackage}\app\claude.exe"));
@@ -129,7 +126,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
         File.WriteAllText(processPath, string.Empty);
         var config = ConfigWith(Win32App(processPath));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result!.Applications.Single().Should().Be(PackagedApp(processPath));
     }
@@ -140,7 +137,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
         _packagedAppsService.GetByPackageFamilyName(ClaudeFamilyName).Returns((PackagedAppInfo?)null);
         var config = ConfigWith(Win32App($@"{StaleClaudePackage}\app\claude.exe"));
 
-        var result = _sut.Sanitize(config);
+        var result = RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         result.Should().BeNull();
     }
@@ -153,7 +150,7 @@ public class PackagedAppPathSanitizerTests : IDisposable
     {
         var config = ConfigWith(Win32App(processPath));
 
-        _sut.Sanitize(config);
+        RustConfigurationBackend.Sanitize(config, _packagedAppsService);
 
         _packagedAppsService.DidNotReceive().GetByPackageFamilyName(Arg.Any<string>());
     }

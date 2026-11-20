@@ -1,0 +1,341 @@
+import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { KeyBadge, OmniTheme, PopupCard, Symbol, TextLink } from "theme.slint";
+
+export struct SearchRow {
+    icon: image,
+    title: string,
+    subtitle: string,
+    target: string,
+    kind: string,
+}
+
+export struct OverlayRow {
+    icon: image,
+    badge: string,
+    active: bool,
+    elevated: bool,
+    section: string,
+    section-gap: length,
+    label: string,
+}
+
+component EmptyRunningApps inherits VerticalBox {
+    padding: 0px; spacing: 6px;
+    Text { text: "Running apps"; color: OmniTheme.text-tertiary; font-size: 11px; }
+    Text { text: "No running apps"; color: OmniTheme.text-secondary; font-size: 13px; }
+}
+
+component AppIcon inherits Image {
+    in property <image> app-icon;
+    source: app-icon.width > 0 ? app-icon : @image-url("../../OmniSpot/Resources/default_app_icon.png");
+    width: 20px;
+    height: 20px;
+    image-fit: contain;
+}
+
+component IconAction inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> outlined;
+    callback activated();
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border-width: outlined ? 1px : 0px;
+    border-color: OmniTheme.divider;
+    background: outlined || mouse.has-hover || focus.has-focus ? OmniTheme.subtle : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.activated(); }
+    Symbol { text: root.glyph; color: OmniTheme.text-secondary; font-size: 12px; }
+    mouse := TouchArea { clicked => { focus.focus(); root.activated(); } }
+    focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.activated(); return accept; }
+            reject
+        }
+    }
+}
+
+export component SpotlightWindow inherits Window {
+    in property <[SearchRow]> results;
+    in property <string> feedback;
+    in-out property <int> selected-index;
+    in-out property <string> query <=> input.text;
+    callback search(string);
+    callback launch(int);
+    callback dismiss();
+    forward-focus: input;
+
+    title: "OmniSpot Spotlight";
+    width: 580px;
+    height: 470px;
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+
+    PopupCard {
+        x: 16px; y: 16px; width: parent.width - 32px; height: parent.height - 32px;
+        FocusScope {
+            forward-focus: input;
+            key-pressed(event) => {
+                if event.text == Key.Escape { root.dismiss(); return accept; }
+                if event.text == Key.UpArrow && root.results.length > 0 {
+                    root.selected-index = max(0, root.selected-index - 1);
+                    return accept;
+                }
+                if event.text == Key.DownArrow && root.results.length > 0 {
+                    root.selected-index = min(root.results.length - 1, root.selected-index + 1);
+                    return accept;
+                }
+                reject
+            }
+            VerticalBox {
+                padding: 0px; spacing: 0px;
+                HorizontalBox {
+                    padding-left: 14px; padding-right: 14px; padding-top: 12px; padding-bottom: 12px;
+                    spacing: 10px;
+                    Rectangle {
+                        height: 42px;
+                        horizontal-stretch: 1;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: OmniTheme.divider;
+                        background: OmniTheme.subtle;
+                        Symbol { x: 12px; width: 18px; text: ""; color: OmniTheme.text-secondary; font-size: 15px; }
+                        Text {
+                            x: 34px; width: parent.width - self.x - 30px;
+                            text: "Search apps and files...";
+                            color: OmniTheme.text-secondary; font-size: 15px; vertical-alignment: center;
+                            visible: root.query == "";
+                        }
+                        input := TextInput {
+                            x: 34px; width: parent.width - self.x - 30px;
+                            height: parent.height;
+                            font-size: 15px;
+                            color: OmniTheme.text-primary;
+                            vertical-alignment: center;
+                            single-line: true;
+                            accessible-label: "Search apps and files";
+                            edited => { root.search(self.text); }
+                            accepted => { root.launch(root.selected-index); }
+                        }
+                        if input.has-focus : Rectangle {
+                            x: 1px; y: parent.height - 2px; width: parent.width - 2px; height: 2px;
+                            border-radius: 1px; background: OmniTheme.accent;
+                        }
+                        if root.query != "" : IconAction {
+                            x: parent.width - 28px; y: 9px;
+                            glyph: ""; label: "Clear search";
+                            activated => { root.query = ""; root.search(""); input.focus(); }
+                        }
+                    }
+                    Rectangle {
+                        width: 38px; height: 42px;
+                        KeyBadge { width: 38px; height: 28px; y: 7px; label: "ESC"; label-size: 10.5px; }
+                    }
+                }
+                HorizontalBox {
+                    padding-left: 14px; padding-right: 14px; padding-top: 0px; padding-bottom: 0px;
+                    Rectangle { height: 1px; background: OmniTheme.divider; }
+                }
+                VerticalBox {
+                    padding-left: 14px; padding-right: 14px; padding-top: 8px; padding-bottom: 8px;
+                    spacing: 4px;
+                    vertical-stretch: 1;
+                    if root.results.length > 0 || (root.query == "" && root.feedback == "") : HorizontalBox {
+                        padding-left: 6px; padding-top: 4px; padding-bottom: 2px;
+                        Text {
+                            text: root.query == "" ? "QUICK ACCESS" : "SEARCH RESULTS";
+                            color: OmniTheme.text-secondary; font-size: 10.5px; font-weight: 600;
+                        }
+                    }
+                    if root.results.length == 0 && (root.query != "" || root.feedback != "") : VerticalBox {
+                        alignment: center; spacing: 8px; vertical-stretch: 1;
+                        Symbol { text: ""; font-size: 28px; color: OmniTheme.text-tertiary; }
+                        Text {
+                            text: root.feedback != "" ? root.feedback : "No matching apps or files";
+                            color: OmniTheme.text-secondary; horizontal-alignment: center; font-size: 13px;
+                            wrap: word-wrap;
+                        }
+                    }
+                    if root.results.length > 0 : ScrollView {
+                        vertical-stretch: 1;
+                        content-y: -max(0px, (root.selected-index + 1) * 50px - self.visible-height);
+                        VerticalBox {
+                            padding: 0px; spacing: 2px;
+                            for result[index] in root.results : Rectangle {
+                                height: 48px;
+                                border-radius: 8px;
+                                background: root.selected-index == index
+                                    ? OmniTheme.accent.with-alpha(hit.has-hover ? 0.20 : 0.14)
+                                    : hit.has-hover ? OmniTheme.accent.with-alpha(0.08) : transparent;
+                                if root.selected-index == index : Rectangle {
+                                    x: 4px; y: 15px; width: 3px; height: 18px; border-radius: 1.5px;
+                                    background: OmniTheme.accent;
+                                }
+                                HorizontalBox {
+                                    padding-left: 16px; padding-right: 8px; padding-top: 2px; padding-bottom: 2px;
+                                    spacing: 10px;
+                                    Rectangle {
+                                        width: 30px; height: 44px;
+                                        Rectangle {
+                                            y: 7px; height: 30px;
+                                            border-radius: 6px; border-width: 1px; border-color: OmniTheme.divider;
+                                            background: OmniTheme.subtle;
+                                            AppIcon { x: 5px; y: 5px; app-icon: result.icon; }
+                                        }
+                                    }
+                                    VerticalBox {
+                                        padding: 0px; spacing: 1px; alignment: center; horizontal-stretch: 1;
+                                        Text { text: result.title; color: OmniTheme.text-primary; font-size: 13.5px; font-weight: 600; overflow: elide; }
+                                        Text { text: result.subtitle; color: OmniTheme.text-secondary; font-size: 11px; overflow: elide; }
+                                    }
+                                    if result.kind != "" : VerticalBox {
+                                        padding: 0px; alignment: center;
+                                        Rectangle {
+                                            height: 20px;
+                                            border-radius: 4px; border-width: 1px; border-color: OmniTheme.divider;
+                                            background: OmniTheme.subtle;
+                                            HorizontalBox {
+                                                padding-left: 8px; padding-right: 8px; padding-top: 0px; padding-bottom: 0px;
+                                                Text { text: result.kind; color: OmniTheme.text-secondary; font-size: 10px; vertical-alignment: center; }
+                                            }
+                                        }
+                                    }
+                                }
+                                hit := TouchArea { mouse-cursor: pointer; clicked => { root.launch(index); } }
+                                accessible-role: button;
+                                accessible-label: result.title;
+                                accessible-action-default => { root.launch(index); }
+                            }
+                        }
+                    }
+                }
+                Rectangle { height: 1px; background: OmniTheme.divider; }
+                HorizontalBox {
+                    padding-left: 16px; padding-right: 16px; padding-top: 8px; padding-bottom: 8px;
+                    spacing: 16px;
+                    Text {
+                        text: root.selected-index >= 0 && root.selected-index < root.results.length
+                            ? root.results[root.selected-index].target : "";
+                        color: OmniTheme.text-secondary; font-size: 11px; overflow: elide; horizontal-stretch: 1;
+                    }
+                    Text { text: "↑↓ Navigate   ↵ Open   Esc Close"; color: OmniTheme.text-tertiary; font-size: 11px; }
+                }
+            }
+        }
+    }
+}
+
+export component AppOverlayWindow inherits Window {
+    in property <[OverlayRow]> apps;
+    in property <string> feedback;
+    in property <length> rows-height: 64px;
+    in property <int> empty-running-before: -1;
+    callback open-app(int);
+    callback dismiss();
+    title: "OmniSpot App Overlay";
+    width: root.apps.length == 0 ? 272px : 328px;
+    height: min(root.rows-height, 480px) + 64px;
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+
+    PopupCard {
+        x: 16px; y: 16px; width: parent.width - 32px; height: parent.height - 32px;
+        VerticalBox {
+            padding: 16px; spacing: 0px;
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalBox {
+                    padding: 0px; spacing: 0px;
+                    for app[index] in root.apps : VerticalBox {
+                        padding: 0px; spacing: 0px;
+                        if index == root.empty-running-before : EmptyRunningApps {}
+                        if app.section != "" : VerticalBox {
+                            padding-top: app.section-gap; padding-bottom: 6px;
+                            padding-left: 0px; padding-right: 0px;
+                            Text { text: app.section; color: OmniTheme.text-tertiary; font-size: 11px; }
+                        }
+                        Rectangle {
+                            height: 32px;
+                            border-radius: 6px;
+                            background: app.active || hit.has-hover ? OmniTheme.accent.with-alpha(0.10) : transparent;
+                            HorizontalBox {
+                                padding-left: 4px; padding-right: 4px; padding-top: 0px; padding-bottom: 0px;
+                                spacing: 8px;
+                                Rectangle { width: 20px; height: 32px; AppIcon { y: 6px; app-icon: app.icon; } }
+                                Text { text: app.label; color: OmniTheme.text-primary; font-size: 13px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                if app.elevated : Symbol {
+                                    width: 14px; text: "\u{ea18}"; font-size: 13px; color: OmniTheme.caution;
+                                    accessible-label: "Elevated application";
+                                }
+                                if app.badge != "" : Rectangle {
+                                    width: 26px; height: 32px;
+                                    KeyBadge { width: 26px; height: 26px; y: 3px; label: app.badge; }
+                                }
+                            }
+                            hit := TouchArea { mouse-cursor: pointer; clicked => { root.open-app(index); } }
+                            accessible-role: button;
+                            accessible-label: app.label + " " + app.badge;
+                            accessible-action-default => { root.open-app(index); }
+                        }
+                    }
+                    if root.apps.length == 0 : EmptyRunningApps {}
+                    if root.feedback != "" : Text { text: root.feedback; color: OmniTheme.text-secondary; font-size: 12px; wrap: word-wrap; }
+                }
+            }
+        }
+    }
+}
+
+export component WarningOverlayWindow inherits Window {
+    in property <bool> restricted;
+    in property <float> countdown: 1;
+    callback dismiss();
+    callback learn-more();
+    title: "OmniSpot Warning";
+    width: 332px;
+    height: root.restricted ? 128px : 167px;
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+    PopupCard {
+        x: 16px; y: 16px; width: 300px; height: parent.height - 48px;
+        HorizontalBox {
+            padding-left: 16px; padding-right: 10px; padding-top: 12px; padding-bottom: 12px;
+            spacing: 12px;
+            VerticalBox {
+                padding: 0px; width: 32px;
+                Symbol { text: root.restricted ? "" : ""; font-size: 30px; color: OmniTheme.caution; }
+                Rectangle { vertical-stretch: 1; }
+            }
+            VerticalBox {
+                padding: 0px; spacing: 4px; horizontal-stretch: 1;
+                Text { text: root.restricted ? "Restricted application" : "Elevated application"; font-size: 13px; font-weight: 600; color: OmniTheme.text-primary; }
+                Text {
+                    text: root.restricted ? "OmniSpot cannot detect your keystrokes while this app is in focus."
+                        : "OmniSpot can no longer detect your keystrokes while an elevated app is in focus.";
+                    color: OmniTheme.text-secondary; font-size: 12px; wrap: word-wrap;
+                }
+                if !root.restricted : TextLink {
+                    label: "Learn more";
+                    activated => { root.learn-more(); }
+                }
+            }
+            VerticalBox {
+                padding: 0px; width: 24px;
+                IconAction { glyph: ""; label: "Dismiss"; outlined: true; activated => { root.dismiss(); } }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+        Rectangle {
+            x: 6px; y: parent.height - 3px; width: (parent.width - 12px) * root.countdown;
+            height: 2px; border-radius: 1px; background: OmniTheme.caution;
+        }
+    }
+}
