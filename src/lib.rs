@@ -21,3 +21,4 @@ mod startup;
 mod runtime;
 mod spotlight;
 mod storage;
+mod taskbar;

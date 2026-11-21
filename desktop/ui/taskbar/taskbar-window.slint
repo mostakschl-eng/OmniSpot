@@ -1,0 +1,325 @@
+import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, PopupCard, Symbol } from "../theme.slint";
+import { NavigationItem } from "../controls/navigation-item.slint";
+import { SettingSwitch } from "../controls/setting-row.slint";
+import { PanelButton } from "controls.slint";
+import { SearchResults, TaskbarResult } from "search-results.slint";
+import { QuickSettings } from "quick-settings.slint";
+import { NotificationList, TaskbarNotification } from "notifications.slint";
+import { CalendarMonth, TaskbarCalendar } from "calendar.slint";
+import { AppDock, DockApp } from "app-dock.slint";
+
+export component TaskbarWindow inherits Window {
+    in property <[TaskbarResult]> results;
+    in property <[DockApp]> apps;
+    in property <[TaskbarNotification]> notifications;
+    in property <string> time;
+    in property <string> date;
+    in property <CalendarMonth> calendar-month;
+    in property <string> window-count;
+    in property <string> battery-description;
+    in property <float> volume;
+    in property <float> brightness;
+    in property <[string]> desktops;
+    in property <bool> taskbar-test-active;
+    in property <int> taskbar-test-seconds;
+    in property <string> taskbar-test-status;
+    in-out property <string> query;
+    in-out property <int> filter;
+    in-out property <int> active-desktop;
+    private property <int> selected-index;
+    private property <int> page;
+    private property <string> preview-action;
+    callback clear-notifications();
+    callback dismiss();
+    callback toggle-taskbar-test(bool);
+
+    title: "OmniSpot Taskbar";
+    preferred-width: 1100px;
+    preferred-height: 665px;
+    min-width: 960px;
+    min-height: 600px;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+    forward-focus: search;
+    init => { search.focus(); }
+    changed results => { selected-index = 0; }
+
+    function navigate(page: int) {
+        root.page = page;
+        root.filter = [0, 0, 2, 1, 0, 4][page];
+        root.preview-action = "";
+        if page == 1 { search.focus(); }
+    }
+
+    function preview(label: string) {
+        root.preview-action = label + " · Preview only";
+    }
+
+    panel := PopupCard {
+        x: 10px; y: 10px; width: parent.width - 20px; height: parent.height - 20px;
+        background: OmniTheme.dark ? #202020f2 : #f7f7faf2;
+        border-radius: 16px;
+        FocusScope {
+            width: parent.width;
+            height: parent.height;
+            key-pressed(event) => {
+                if event.text == Key.Escape { root.dismiss(); return accept; }
+                if event.text == Key.UpArrow && root.page != 4 && root.results.length > 0 {
+                    root.selected-index = max(0, root.selected-index - 1);
+                    return accept;
+                }
+                if event.text == Key.DownArrow && root.page != 4 && root.results.length > 0 {
+                    root.selected-index = min(root.results.length - 1, root.selected-index + 1);
+                    return accept;
+                }
+                reject
+            }
+            VerticalBox {
+                width: parent.width;
+                height: parent.height;
+                padding: 0px; spacing: 0px;
+                HorizontalBox {
+                    height: 61px;
+                    padding-left: 18px; padding-right: 18px;
+                    padding-top: 12px; padding-bottom: 12px;
+                    spacing: 10px;
+                    Rectangle {
+                        width: 31px; height: 31px;
+                        border-radius: 6px;
+                        background: OmniTheme.subtle;
+                        Image { source: @image-url("../../assets/app-switcher.png"); x: 3px; y: 3px; width: 25px; height: 25px; image-fit: contain; }
+                    }
+                    Text {
+                        width: 146px;
+                        text: "OmniSpot"; color: OmniTheme.text-primary;
+                        font-size: 21px; font-weight: 700; vertical-alignment: center;
+                    }
+                    Rectangle {
+                        height: 37px;
+                        horizontal-stretch: 1;
+                        border-radius: 6px; border-width: 1px;
+                        border-color: search.has-focus ? OmniTheme.accent : OmniTheme.divider;
+                        background: OmniTheme.card-background;
+                        Symbol { x: 9px; width: 20px; font-size: 15px; text: "\u{e721}"; }
+                        if root.query == "" : Text {
+                            x: 38px; width: parent.width - 78px;
+                            text: "Search apps, windows, files, and the web";
+                            color: OmniTheme.text-secondary;
+                            font-size: 14px; vertical-alignment: center;
+                        }
+                        search := TextInput {
+                            x: 38px; width: parent.width - 78px; height: parent.height;
+                            text: root.query;
+                            color: OmniTheme.text-primary;
+                            font-size: 14px; vertical-alignment: center;
+                            accessible-label: "Search apps, windows, files, and the web";
+                            edited => {
+                                if root.page != 0 && root.page != 1 { root.navigate(1); }
+                                root.query = self.text;
+                                root.selected-index = 0;
+                            }
+                            accepted => {
+                                if root.page != 4 && root.selected-index < root.results.length {
+                                    root.preview(root.results[root.selected-index].title);
+                                }
+                            }
+                        }
+                        if root.query != "" : PanelButton {
+                            x: parent.width - 34px; y: 3px; width: 30px; height: 30px;
+                            label: "Clear search"; caption: ""; glyph: "\u{e711}";
+                            activated => { root.query = ""; root.navigate(1); }
+                        }
+                    }
+                    Rectangle { width: 180px; }
+                    PanelButton {
+                        width: 34px; label: "Appearance"; caption: ""; glyph: "\u{e712}";
+                        activated => { appearance.show(); }
+                        appearance := PopupWindow {
+                            x: -100px; y: parent.height + 5px;
+                            PopupCard {
+                                width: 134px; height: 116px;
+                                VerticalBox {
+                                    padding: 6px; spacing: 2px;
+                                    for mode[index] in ["System", "Dark", "Light"] : PanelButton {
+                                        height: 32px;
+                                        label: mode;
+                                        selected: OmniTheme.requested-theme == index;
+                                        activated => { OmniTheme.requested-theme = index; appearance.close(); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    PanelButton {
+                        width: 34px; label: "Close preview"; caption: ""; glyph: "\u{e711}";
+                        activated => { root.dismiss(); }
+                    }
+                }
+                Rectangle { height: 1px; background: OmniTheme.divider; }
+                HorizontalBox {
+                    height: panel.height - 127px;
+                    padding: 0px; spacing: 0px;
+                    Rectangle {
+                        width: 190px; background: OmniTheme.subtle;
+                        VerticalBox {
+                            padding: 12px; spacing: 4px;
+                            for item[index] in ["Home", "Search", "Windows", "Apps", "Notifications", "Settings"] : NavigationItem {
+                                label: index == 2 && root.window-count != "" ? item + "  " + root.window-count
+                                    : index == 4 && root.notifications.length > 0 ? item + "  " + root.notifications.length : item;
+                                glyph: ["\u{e80f}", "\u{e721}", "\u{e7c4}", "\u{e71d}", "\u{ea8f}", "\u{e713}"][index];
+                                selected: root.page == index;
+                                activated => { root.navigate(index); }
+                            }
+                        }
+                    }
+                    Rectangle { width: 1px; background: OmniTheme.divider; }
+                    VerticalBox {
+                        padding: 18px; horizontal-stretch: 1;
+                        if root.page == 2 : VerticalBox {
+                            height: 76px;
+                            padding: 0px; spacing: 8px;
+                            Text { text: "Task View"; color: OmniTheme.text-primary; font-size: 19px; font-weight: 600; }
+                            HorizontalBox {
+                                padding: 0px; spacing: 6px;
+                                for desktop[index] in root.desktops : PanelButton {
+                                    label: desktop; glyph: "\u{e7c4}"; outlined: true;
+                                    selected: index == root.active-desktop;
+                                    activated => { root.active-desktop = index; }
+                                }
+                            }
+                            Rectangle { height: 1px; background: OmniTheme.divider; }
+                        }
+                        if root.page == 4 : ScrollView {
+                            vertical-stretch: 1;
+                            NotificationList {
+                                notifications: root.notifications;
+                                clear => { root.clear-notifications(); }
+                            }
+                        }
+                        if root.page == 5 : VerticalBox {
+                            height: 132px;
+                            padding: 0px; spacing: 8px;
+                            Text { text: "Taskbar"; color: OmniTheme.text-primary; font-size: 19px; font-weight: 600; }
+                            SettingSwitch {
+                                glyph: "\u{e7c4}";
+                                label: "Hide Windows taskbar completely";
+                                description: "Experimental. Restores automatically after " + root.taskbar-test-seconds + " seconds, or when you close this preview.";
+                                checked: root.taskbar-test-active;
+                                edited(active) => { root.toggle-taskbar-test(active); }
+                            }
+                            Text {
+                                text: root.taskbar-test-status;
+                                color: OmniTheme.text-secondary;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                        }
+                        if root.page != 4 : SearchResults {
+                            rows: root.results;
+                            show-filters: root.page != 2 && root.page != 5;
+                            selected-index <=> root.selected-index;
+                            filter <=> root.filter;
+                            vertical-stretch: 1;
+                            result-selected(label) => { root.preview(label); }
+                        }
+                        Text {
+                            text: dock.hovered-app != "" ? dock.hovered-app
+                                : root.preview-action != "" ? root.preview-action
+                                : root.page == 4 ? "Esc Close" : "↑ ↓ Navigate     Enter Select     Esc Close";
+                            color: OmniTheme.text-secondary;
+                            font-size: 11px;
+                            overflow: elide;
+                        }
+                    }
+                    Rectangle { width: 1px; background: OmniTheme.divider; }
+                    VerticalBox {
+                        padding: 15px;
+                        width: 306px;
+                        QuickSettings {
+                            vertical-stretch: 1;
+                            time: root.time; date: root.date;
+                            battery-description: root.battery-description;
+                            volume: root.volume; brightness: root.brightness;
+                            notifications: root.notifications;
+                            see-notifications => { root.navigate(4); }
+                        }
+                    }
+                }
+                Rectangle { height: 1px; background: OmniTheme.divider; }
+                HorizontalBox {
+                    height: 64px;
+                    padding-left: 14px; padding-right: 14px; padding-top: 5px; padding-bottom: 5px;
+                    spacing: 8px;
+                    HorizontalBox {
+                        padding: 0px; spacing: 4px;
+                        PanelButton {
+                            width: 34px; y: 10px;
+                            label: "Home"; caption: ""; glyph: "\u{e80f}";
+                            activated => { root.navigate(0); }
+                        }
+                        PanelButton {
+                            width: 34px; y: 10px;
+                            label: "Task View"; caption: ""; glyph: "\u{e7c4}";
+                            selected: root.page == 2;
+                            activated => { root.navigate(2); }
+                        }
+                        PanelButton {
+                            width: 34px; y: 10px;
+                            label: "Show Desktop"; caption: ""; glyph: "\u{e8a7}";
+                            activated => { root.preview("Show Desktop"); }
+                        }
+                    }
+                    Rectangle { width: 1px; height: 28px; background: OmniTheme.divider; }
+                    dock := AppDock {
+                        horizontal-stretch: 1;
+                        apps: root.apps;
+                        app-selected(name) => { root.preview(name); }
+                    }
+                    Rectangle { width: 1px; height: 28px; background: OmniTheme.divider; }
+                    HorizontalBox {
+                        padding: 0px; spacing: 4px;
+                        PanelButton {
+                            y: 10px;
+                            label: "Notifications";
+                            caption: root.notifications.length > 0 ? "" + root.notifications.length : "";
+                            glyph: "\u{ea8f}";
+                            selected: root.page == 4;
+                            activated => { root.navigate(4); }
+                        }
+                        PanelButton {
+                            y: 10px;
+                            label: "Calendar"; caption: root.time; glyph: "\u{e787}";
+                            activated => { calendar.show(); }
+                            calendar := PopupWindow {
+                                x: parent.width - 252px; y: -234px;
+                                TaskbarCalendar { month: root.calendar-month; }
+                            }
+                        }
+                        PanelButton {
+                            y: 10px;
+                            label: "Power"; glyph: "\u{e7e8}";
+                            activated => { power.show(); }
+                            power := PopupWindow {
+                                x: parent.width - 158px; y: -184px;
+                                PopupCard {
+                                    width: 158px; height: 176px;
+                                    VerticalBox {
+                                        padding: 6px; spacing: 2px;
+                                        for action[index] in ["Lock", "Sleep", "Restart", "Shut down", "Sign out"] : PanelButton {
+                                            height: 31px;
+                                            label: action;
+                                            glyph: ["\u{e72e}", "\u{e708}", "\u{e777}", "\u{e7e8}", "\u{e8ac}"][index];
+                                            activated => { power.close(); root.preview(action); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

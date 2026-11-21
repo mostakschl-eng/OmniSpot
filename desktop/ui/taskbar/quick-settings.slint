@@ -1,0 +1,92 @@
+import { HorizontalBox, ScrollView, Slider, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, Symbol } from "../theme.slint";
+import { PanelButton } from "controls.slint";
+import { NotificationList, TaskbarNotification } from "notifications.slint";
+
+component SectionTitle inherits Text {
+    color: OmniTheme.text-primary;
+    font-size: 14px;
+    font-weight: 600;
+    vertical-alignment: center;
+}
+
+component ControlSlider inherits HorizontalBox {
+    in property <string> glyph;
+    in property <string> label;
+    in property <float> initial-value;
+    padding: 0px;
+    spacing: 10px;
+    height: 28px;
+    Symbol { width: 24px; text: root.glyph; }
+    slider := Slider {
+        horizontal-stretch: 1;
+        minimum: 0;
+        maximum: 100;
+        value: root.initial-value;
+        accessible-label: root.label;
+    }
+    Text {
+        width: 40px;
+        text: round(slider.value) + "%";
+        color: OmniTheme.text-primary;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        font-size: 12px;
+    }
+}
+
+export component QuickSettings inherits ScrollView {
+    in property <string> time;
+    in property <string> date;
+    in property <string> battery-description;
+    in property <float> volume;
+    in property <float> brightness;
+    in property <[TaskbarNotification]> notifications;
+    callback see-notifications();
+
+    VerticalBox {
+        padding: 0px;
+        padding-right: 3px;
+        spacing: 9px;
+        VerticalBox {
+            padding: 0px;
+            spacing: 1px;
+            Text { text: root.time; color: OmniTheme.text-primary; font-size: 28px; font-weight: 600; }
+            Text { text: root.date; color: OmniTheme.text-secondary; font-size: 13px; }
+        }
+        SectionTitle { text: "Quick settings"; }
+        for row in 2 : HorizontalBox {
+            padding: 0px; spacing: 6px;
+            for column in 2 : PanelButton {
+                private property <int> control-index: row * 2 + column;
+                private property <bool> toggled: control-index == 0;
+                horizontal-stretch: 1;
+                height: 32px;
+                label: ["Wi-Fi", "Bluetooth", "Airplane mode", "Do not disturb"][control-index];
+                glyph: ["\u{e701}", "\u{e702}", "\u{e709}", "\u{e708}"][control-index];
+                outlined: true;
+                selected: toggled;
+                activated => { self.toggled = !self.toggled; }
+            }
+        }
+        ControlSlider { label: "Volume"; glyph: "\u{e767}"; initial-value: root.volume; }
+        ControlSlider { label: "Brightness"; glyph: "\u{e706}"; initial-value: root.brightness; }
+        if root.battery-description != "" : HorizontalBox {
+            height: 35px;
+            padding: 0px;
+            spacing: 8px;
+            Symbol { width: 24px; text: "\u{e850}"; }
+            VerticalBox {
+                padding: 0px; spacing: 0px; alignment: center; horizontal-stretch: 1;
+                SectionTitle { text: "Battery"; }
+                Text { text: root.battery-description; color: OmniTheme.text-secondary; font-size: 12px; }
+            }
+        }
+        Rectangle { height: 1px; background: OmniTheme.divider; }
+        NotificationList {
+            compact: true;
+            notifications: root.notifications;
+            see-all => { root.see-notifications(); }
+        }
+    }
+}

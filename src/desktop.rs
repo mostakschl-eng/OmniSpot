@@ -7,6 +7,7 @@ pub use crate::configuration::configuration::{ApplicationConfiguration, Configur
 pub use crate::desktop_hook::{CaptureEvent, DesktopCapture, DesktopInstance};
 pub use crate::desktop_icons::{shell_icon, ICON_SIZE};
 pub use crate::spotlight::model::IndexedResult;
+pub use crate::taskbar::{test_hide_windows_taskbar, TASKBAR_TEST_SECONDS};
 
 pub fn load_settings(path: &Path) -> Result<Configuration, String> {
     let settings = crate::storage::load_desktop_settings(path.to_owned())

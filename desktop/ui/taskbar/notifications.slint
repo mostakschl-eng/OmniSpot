@@ -1,0 +1,70 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme } from "../theme.slint";
+import { AppMark, PanelButton } from "controls.slint";
+
+export struct TaskbarNotification {
+    app: string,
+    message: string,
+    time: string,
+    mark: string,
+    tint: color,
+}
+
+export component NotificationList inherits VerticalBox {
+    in property <[TaskbarNotification]> notifications;
+    in property <bool> compact;
+    callback clear();
+    callback see-all();
+
+    padding: 0px;
+    spacing: 6px;
+
+    HorizontalBox {
+        padding: 0px;
+        spacing: 6px;
+        Text {
+            text: "Notifications" + (root.notifications.length > 0 ? " (" + root.notifications.length + ")" : "");
+            color: OmniTheme.text-primary;
+            font-size: root.compact ? 14px : 19px;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if root.compact : PanelButton {
+            height: 27px;
+            label: "See all notifications";
+            caption: "See all";
+            activated => { root.see-all(); }
+        }
+        if !root.compact && root.notifications.length > 0 : PanelButton {
+            height: 30px; label: "Clear all"; outlined: true;
+            activated => { root.clear(); }
+        }
+    }
+    for note[index] in root.notifications : Rectangle {
+        visible: !root.compact || index < 3;
+        height: root.compact ? 44px : 62px;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: OmniTheme.card-border;
+        background: OmniTheme.card-background;
+        HorizontalBox {
+            padding: root.compact ? 6px : 10px;
+            spacing: 9px;
+            AppMark { mark: note.mark; tint: note.tint; }
+            VerticalBox {
+                padding: 0px; spacing: 2px; alignment: center; horizontal-stretch: 1;
+                Text { text: note.app; color: OmniTheme.text-primary; font-size: 12px; font-weight: 600; }
+                Text { text: note.message; color: OmniTheme.text-secondary; font-size: root.compact ? 11px : 13px; overflow: elide; }
+            }
+            Text { text: note.time; color: OmniTheme.text-secondary; font-size: 10px; }
+        }
+    }
+    if root.notifications.length == 0 : Text {
+        height: 30px;
+        text: "You're all caught up.";
+        color: OmniTheme.text-secondary;
+        vertical-alignment: center;
+        font-size: 12px;
+    }
+}

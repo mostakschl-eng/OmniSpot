@@ -7,6 +7,7 @@ mod floating;
 mod host;
 mod icons;
 mod settings;
+mod taskbar_preview;
 
 slint::include_modules!();
 
@@ -71,6 +72,16 @@ fn copy_diagnostics() -> slint::SharedString {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == taskbar_preview::TEST_WORKER_ARG)
+    {
+        if let Err(error) = desktop::test_hide_windows_taskbar() {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     run().inspect_err(|error| {
         if !cfg!(debug_assertions) {
             desktop::show_startup_error(&error.to_string());
@@ -89,7 +100,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Some(option) if option == "--log-all-windows" => desktop::log_window_diagnostics()?,
         Some(option) if option == "--enable-auto-start" => desktop::set_startup(true)?,
         Some(option) if option == "--help" => println!(
-            "OmniSpot [--run [--profile-dir PATH] | --settings-preview | --migrate-profile PATH | --log-all-windows | --enable-auto-start]"
+            "OmniSpot [--run [--profile-dir PATH] | --settings-preview | --taskbar-preview | --migrate-profile PATH | --log-all-windows | --enable-auto-start]"
         ),
         Some(option) if option == "--migrate-profile" => {
             let mut args = std::env::args_os().skip(2);
@@ -116,6 +127,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             host::run(profile)?;
         }
         Some(option) if option == "--about" => create_about()?.run()?,
+        Some(option) if option == "--taskbar-preview" => taskbar_preview::run()?,
         Some(option) if option == "--spotlight" => {
             let config = desktop::load_settings(&settings_path)?;
             let index = desktop::spotlight_index_path(&preview, &config);
@@ -149,7 +161,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             settings::create(settings_path, false, |_| Ok(()))?.run()?;
         }
         None => host::run(desktop::default_profile_dir()?)?,
-        Some(_) => return Err("Expected --run, --settings-preview, --migrate-profile PATH, --about, --spotlight, --overlay, --warning, --warning-restricted, --tray or --profile-dir PATH".into()),
+        Some(_) => return Err("Expected --run, --settings-preview, --taskbar-preview, --migrate-profile PATH, --about, --spotlight, --overlay, --warning, --warning-restricted, --tray or --profile-dir PATH".into()),
     }
     Ok(())
 }

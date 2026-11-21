@@ -1,0 +1,97 @@
+import { TaskbarWindow } from "taskbar-window.slint";
+import { TaskbarResult } from "search-results.slint";
+
+export component TaskbarPreview inherits TaskbarWindow {
+    callback close-preview();
+    callback toggle-test(bool);
+    in property <bool> test-active;
+    in property <int> test-seconds;
+    in property <string> test-status;
+    private property <bool> notifications-cleared;
+    private property <TaskbarResult> project: {
+        group-title: "Best match", title: "Microsoft Project", detail: "App",
+        mark: "P", tint: #107a49,
+    };
+    private property <TaskbarResult> word: {
+        group-title: "Open windows", title: "Project Plan – Word", detail: "Microsoft Word · 1 window",
+        mark: "W", tint: #185abd,
+    };
+    private property <TaskbarResult> browser: {
+        group-title: "Open windows", title: "Project research – Microsoft Edge", detail: "Microsoft Edge · Desktop 2",
+        mark: "e", tint: #087f90,
+    };
+    private property <TaskbarResult> explorer: {
+        title: "Work – File Explorer", detail: "File Explorer",
+        mark: "F", tint: #926013,
+    };
+    private property <TaskbarResult> code: {
+        title: "OmniSpot – Visual Studio Code", detail: "Visual Studio Code",
+        mark: "</>", tint: #1773ac,
+    };
+    private property <TaskbarResult> slides: {
+        group-title: "Files", title: "Project Kickoff.pptx", detail: "OneDrive – Work · Modified 2 h ago",
+        mark: "P", tint: #ac3e28,
+    };
+    private property <TaskbarResult> sheet: {
+        title: "Project Budget.xlsx", detail: "Work / Finance · Modified yesterday",
+        mark: "X", tint: #146c43,
+    };
+    private property <TaskbarResult> settings: {
+        group-title: "Settings", title: "OmniSpot Settings", detail: "Shortcuts and appearance",
+        glyph: "\u{e713}",
+    };
+    private property <TaskbarResult> web: {
+        title: root.query == "" ? "Search the web" : "Search the web for “" + root.query + "”",
+        glyph: "\u{e721}",
+    };
+
+    query: "project";
+    taskbar-test-active: root.test-active;
+    taskbar-test-seconds: root.test-seconds;
+    taskbar-test-status: root.test-status;
+    toggle-taskbar-test(active) => { root.toggle-test(active); }
+    time: "10:38 AM";
+    date: "Tue, Jan 28, 2025";
+    calendar-month: { label: "January 2025", first-weekday: 3, days: 31, today: 28 };
+    battery-description: "87% · 5 h 12 min remaining";
+    volume: 67;
+    brightness: 72;
+    desktops: ["Desktop 1", "Desktop 2"];
+    window-count: "4";
+    results: root.filter == 1 ? [
+            root.project,
+            { title: "Microsoft Edge", detail: "App", mark: "e", tint: #087f90 },
+            { title: "File Explorer", detail: "App", mark: "F", tint: #926013 },
+            { title: "Visual Studio Code", detail: "App", mark: "</>", tint: #1773ac },
+        ]
+        : root.filter == 2 ? (root.active-desktop == 0 ? [root.word, root.explorer] : [root.browser, root.code])
+        : root.filter == 3 ? [root.slides, root.sheet]
+        : root.filter == 4 ? [
+            root.settings,
+            { title: "Network & internet", detail: "Windows Settings", glyph: "\u{e701}" },
+            { title: "Sound", detail: "Windows Settings", glyph: "\u{e767}" },
+            { title: "Display", detail: "Windows Settings", glyph: "\u{e7f4}" },
+        ]
+        : root.filter == 5 ? [root.web]
+        : root.query == "" ? [root.word, root.project, root.settings]
+        : [root.project, root.word, root.slides, root.sheet, root.web];
+
+    apps: [
+        { name: "Microsoft Edge", mark: "e", tint: #087f90, windows: 2 },
+        { name: "File Explorer", mark: "F", tint: #926013, windows: 1 },
+        { name: "Word", mark: "W", tint: #185abd, windows: 1 },
+        { name: "Excel", mark: "X", tint: #146c43, windows: 1 },
+        { name: "PowerPoint", mark: "P", tint: #ac3e28, windows: 1 },
+        { name: "Teams", mark: "T", tint: #5558a8, windows: 2 },
+        { name: "Outlook", mark: "O", tint: #0068aa, windows: 1 },
+        { name: "Visual Studio Code", mark: "</>", tint: #1773ac, windows: 1 },
+        { name: "Figma", mark: "F", tint: #645577, windows: 0 },
+    ];
+    notifications: root.notifications-cleared ? [] : [
+        { app: "Snipping Tool", message: "Screenshot copied to clipboard", time: "10:32 AM", mark: "S", tint: #2374a3 },
+        { app: "Mail", message: "Project update from Daniel", time: "9:48 AM", mark: "M", tint: #0068aa },
+        { app: "Teams", message: "Meeting in 10 minutes – Project Sync", time: "9:20 AM", mark: "T", tint: #5558a8 },
+    ];
+    clear-notifications => { root.notifications-cleared = true; }
+    dismiss => { root.close-preview(); }
+}

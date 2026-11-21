@@ -1,0 +1,44 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, PopupCard } from "../theme.slint";
+
+export struct CalendarMonth {
+    label: string,
+    first-weekday: int,
+    days: int,
+    today: int,
+}
+
+export component TaskbarCalendar inherits PopupCard {
+    in property <CalendarMonth> month;
+    width: 252px;
+    height: 226px;
+
+    VerticalBox {
+        padding: 12px;
+        spacing: 2px;
+        Text { text: root.month.label; color: OmniTheme.text-primary; font-size: 15px; font-weight: 600; }
+        HorizontalBox {
+            padding: 0px; spacing: 0px;
+            for weekday in ["S", "M", "T", "W", "T", "F", "S"] : Text {
+                width: 32px; height: 23px;
+                text: weekday; color: OmniTheme.text-secondary; font-size: 11px;
+                horizontal-alignment: center; vertical-alignment: center;
+            }
+        }
+        for week in 6 : HorizontalBox {
+            padding: 0px; spacing: 0px;
+            for weekday in 7 : Rectangle {
+                private property <int> day: week * 7 + weekday + 1 - root.month.first-weekday;
+                width: 32px; height: 24px;
+                border-radius: 5px;
+                background: day == root.month.today ? OmniTheme.accent : transparent;
+                if day >= 1 && day <= root.month.days : Text {
+                    text: "" + day;
+                    color: day == root.month.today ? OmniTheme.accent-text : OmniTheme.text-primary;
+                    font-size: 12px;
+                    horizontal-alignment: center; vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

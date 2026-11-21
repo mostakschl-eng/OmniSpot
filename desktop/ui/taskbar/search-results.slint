@@ -1,0 +1,94 @@
+import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, Symbol } from "../theme.slint";
+import { AppMark, PanelButton } from "controls.slint";
+
+export struct TaskbarResult {
+    group-title: string,
+    title: string,
+    detail: string,
+    mark: string,
+    tint: color,
+    glyph: string,
+}
+
+export component SearchResults inherits VerticalBox {
+    in property <[TaskbarResult]> rows;
+    in property <bool> show-filters: true;
+    in-out property <int> selected-index;
+    in-out property <int> filter;
+    callback result-selected(string);
+
+    padding: 0px;
+    spacing: 12px;
+    if root.show-filters : HorizontalBox {
+        padding: 0px;
+        spacing: 6px;
+        for tab[index] in ["All", "Apps", "Windows", "Files", "Settings", "Web"] : PanelButton {
+            label: tab;
+            selected: index == root.filter;
+            outlined: true;
+            activated => { root.filter = index; root.selected-index = 0; }
+        }
+    }
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalBox {
+            padding: 0px;
+            spacing: 4px;
+            for row[index] in root.rows : VerticalBox {
+                padding: 0px;
+                spacing: 4px;
+                if row.group-title != "" : Text {
+                    height: 26px;
+                    text: row.group-title;
+                    color: OmniTheme.text-primary;
+                    font-size: 13px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    height: 53px;
+                    border-radius: 7px;
+                    border-width: keys.has-focus ? 1px : 0px;
+                    border-color: OmniTheme.accent;
+                    background: index == root.selected-index ? OmniTheme.accent.with-alpha(hit.has-hover ? 0.22 : 0.15)
+                        : hit.has-hover ? OmniTheme.subtle : transparent;
+                    accessible-role: button;
+                    accessible-label: row.title;
+                    accessible-action-default => { root.selected-index = index; root.result-selected(row.title); }
+                    HorizontalBox {
+                        padding: 10px;
+                        spacing: 12px;
+                        if row.mark != "" : AppMark { mark: row.mark; tint: row.tint; }
+                        if row.mark == "" : Symbol { width: 28px; text: row.glyph; }
+                        VerticalBox {
+                            padding: 0px;
+                            spacing: 1px;
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text { text: row.title; color: OmniTheme.text-primary; font-size: 14px; font-weight: 600; overflow: elide; }
+                            if row.detail != "" : Text {
+                                text: row.detail; color: OmniTheme.text-secondary; font-size: 12px; overflow: elide;
+                            }
+                        }
+                        Symbol { width: 16px; text: "\u{e76c}"; font-size: 11px; color: OmniTheme.text-secondary; }
+                    }
+                    keys := FocusScope {
+                        key-pressed(event) => {
+                            if event.text == Key.Return || event.text == " " {
+                                root.selected-index = index;
+                                root.result-selected(row.title);
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+                    hit := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { keys.focus(); root.selected-index = index; root.result-selected(row.title); }
+                    }
+                }
+            }
+        }
+    }
+}

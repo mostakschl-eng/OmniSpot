@@ -1,0 +1,61 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { OmniTheme } from "../theme.slint";
+import { AppMark } from "controls.slint";
+
+export struct DockApp {
+    name: string,
+    mark: string,
+    tint: color,
+    windows: int,
+}
+
+export component AppDock inherits HorizontalBox {
+    in property <[DockApp]> apps;
+    out property <string> hovered-app;
+    callback app-selected(string);
+    private property <int> selected: -1;
+    height: 54px;
+    alignment: center;
+    padding: 0px;
+    spacing: 5px;
+
+    for app[index] in root.apps : Rectangle {
+        width: 44px;
+        height: 47px;
+        border-radius: 8px;
+        border-width: keys.has-focus ? 1px : 0px;
+        border-color: OmniTheme.accent;
+        background: root.selected == index ? OmniTheme.accent.with-alpha(0.15)
+            : hit.has-hover ? OmniTheme.subtle : transparent;
+        accessible-role: button;
+        accessible-label: app.name + (app.windows > 0 ? ", open windows: " + app.windows : ", pinned");
+        accessible-action-default => { root.select-app(index, app.name); }
+        AppMark { x: 8px; y: 6px; mark: app.mark; tint: app.tint; }
+        if app.windows > 0 : Rectangle {
+            width: app.windows > 1 ? 12px : 5px;
+            height: 4px;
+            y: 38px;
+            border-radius: 2px;
+            background: OmniTheme.accent;
+        }
+        keys := FocusScope {
+            key-pressed(event) => {
+                if event.text == Key.Return || event.text == " " { root.select-app(index, app.name); return accept; }
+                reject
+            }
+        }
+        hit := TouchArea {
+            mouse-cursor: pointer;
+            changed has-hover => {
+                if self.has-hover { root.hovered-app = app.name; }
+                else if root.hovered-app == app.name { root.hovered-app = ""; }
+            }
+            clicked => { keys.focus(); root.select-app(index, app.name); }
+        }
+    }
+
+    function select-app(index: int, name: string) {
+        root.selected = index;
+        root.app-selected(name);
+    }
+}

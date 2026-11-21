@@ -1,0 +1,63 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { OmniTheme, Symbol } from "../theme.slint";
+
+export component PanelButton inherits Rectangle {
+    in property <string> label;
+    in property <string> glyph;
+    in property <string> caption: label;
+    in property <bool> selected;
+    in property <bool> outlined;
+    callback activated();
+
+    height: 34px;
+    border-radius: 6px;
+    border-width: keys.has-focus || outlined ? 1px : 0px;
+    border-color: keys.has-focus ? OmniTheme.accent : OmniTheme.divider;
+    background: selected ? OmniTheme.accent.with-alpha(hit.has-hover ? 0.22 : 0.15)
+        : hit.has-hover || outlined ? OmniTheme.subtle : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.activated(); }
+    forward-focus: keys;
+
+    HorizontalBox {
+        padding: 8px;
+        spacing: 7px;
+        alignment: center;
+        if root.glyph != "" : Symbol { width: 17px; font-size: 14px; text: root.glyph; }
+        if root.caption != "" : Text {
+            text: root.caption;
+            color: OmniTheme.text-primary;
+            font-size: 13px;
+            font-weight: root.selected ? 600 : 400;
+            vertical-alignment: center;
+        }
+    }
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.activated(); return accept; }
+            reject
+        }
+    }
+    hit := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { keys.focus(); root.activated(); }
+    }
+}
+
+export component AppMark inherits Rectangle {
+    in property <string> mark;
+    in property <color> tint;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: tint;
+    Text {
+        text: root.mark;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
