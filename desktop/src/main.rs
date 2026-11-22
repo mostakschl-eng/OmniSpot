@@ -40,9 +40,15 @@ fn create_about() -> Result<AboutWindow, slint::PlatformError> {
     Ok(window)
 }
 
-fn brand_window(window: &slint::Window) {
+pub(crate) fn brand_window(window: &slint::Window) {
     if let Some(handle) = host::hwnd(window) {
         desktop::set_window_icon(handle);
+    }
+}
+
+pub(crate) fn drag_window(window: &slint::Window) {
+    if let Some(handle) = host::hwnd(window) {
+        desktop::drag_window(handle);
     }
 }
 

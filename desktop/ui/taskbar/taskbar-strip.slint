@@ -1,0 +1,207 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, PopupCard } from "../theme.slint";
+import { AppMark, PanelButton, StripButton } from "controls.slint";
+import { AppDock, DockApp } from "app-dock.slint";
+import { CalendarMonth, TaskbarCalendar } from "calendar.slint";
+
+// Bottom bar: only what a taskbar must keep. Network, sound and battery live in Quick settings.
+export component TaskbarStrip inherits Rectangle {
+    in property <[DockApp]> apps;
+    in property <string> time;
+    in property <string> short-date;
+    in property <CalendarMonth> calendar-month;
+    in property <int> notification-count;
+    in property <int> active-page;
+    in property <bool> quick-open;
+    in property <bool> center-apps: true;
+    in property <bool> show-tray: true;
+    out property <string> hovered-app: dock.hovered-app;
+    out property <string> hovered-label:
+        chevron-btn.hovered ? "Running apps"
+        : clock-hit.has-hover ? "Date and time"
+        : bell-btn.hovered ? "Notifications"
+        : power-btn.hovered ? "Power"
+        : desktop-hit.has-hover ? "Show desktop"
+        : "";
+    callback open-start();
+    callback open-search();
+    callback open-task-view();
+    callback open-notifications();
+    callback toggle-quick();
+    callback app-selected(string);
+    callback action(string);
+
+    height: OmniTheme.strip-height;
+    // Same colour as the rest of the window: no separate dark bar.
+    background: transparent;
+
+    Rectangle { y: 0px; width: parent.width; height: 1px; background: OmniTheme.glass-border-subtle; }
+
+    HorizontalBox {
+        width: parent.width;
+        height: parent.height;
+        padding-left: 8px;
+        padding-right: 0px;
+        padding-top: 0px;
+        padding-bottom: 0px;
+        spacing: OmniTheme.gap;
+
+        // App dock, centred on the whole strip rather than on the free space.
+        dock-area := Rectangle {
+            horizontal-stretch: 1;
+            dock := AppDock {
+                apps: root.apps;
+                width: self.preferred-width;
+                y: (parent.height - self.height) / 2;
+                x: root.center-apps
+                    ? max(0px, (root.width - self.width) / 2 - (dock-area.absolute-position.x - root.absolute-position.x))
+                    : 8px;
+                app-selected(name) => { root.app-selected(name); }
+            }
+        }
+
+        // The arrow: shows all running apps, like the Windows tray overflow.
+        Rectangle {
+            width: root.show-tray ? 32px : 0px;
+            height: OmniTheme.control-size;
+            visible: root.show-tray;
+            chevron-btn := StripButton {
+                width: parent.width;
+                glyph: "\u{e70e}";
+                label: "Running apps";
+                activated => { tray-pop.show(); }
+            }
+            tray-pop := PopupWindow {
+                x: parent.width - tray-card.width + 4px;
+                y: -(tray-card.height + 14px);
+                tray-card := PopupCard {
+                    width: tray-row.preferred-width + 20px;
+                    height: 60px;
+                    tray-row := HorizontalLayout {
+                        x: 10px;
+                        y: 10px;
+                        width: self.preferred-width;
+                        height: 40px;
+                        spacing: 4px;
+                        for app in root.apps : Rectangle {
+                            width: app.windows > 0 ? 40px : 0px;
+                            height: 40px;
+                            visible: app.windows > 0;
+                            border-radius: OmniTheme.radius-m;
+                            background: tray-hit.pressed ? OmniTheme.press-bg : tray-hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+                            accessible-role: button;
+                            accessible-label: app.name;
+                            AppMark {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                width: OmniTheme.icon-size;
+                                height: OmniTheme.icon-size;
+                                mark: app.mark;
+                                glyph: app.glyph;
+                                tint: app.tint;
+                            }
+                            tray-hit := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { tray-pop.close(); root.app-selected(app.name); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Clock and calendar (right aligned like Windows 11)
+        Rectangle {
+            width: 92px;
+            height: OmniTheme.control-size;
+            clock-btn := Rectangle {
+                width: parent.width;
+                height: parent.height;
+                border-radius: OmniTheme.radius-m;
+                background: clock-hit.pressed ? OmniTheme.press-bg : clock-hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+                animate background { duration: 120ms; }
+                accessible-role: button;
+                accessible-label: "Date and time";
+                accessible-action-default => { calendar.show(); }
+                VerticalLayout {
+                    alignment: center;
+                    padding-right: 10px;
+                    spacing: 0px;
+                    Text {
+                        text: root.time;
+                        color: OmniTheme.text-primary;
+                        font-size: 12px;
+                        font-weight: 600;
+                        horizontal-alignment: right;
+                    }
+                    Text {
+                        text: root.short-date;
+                        color: OmniTheme.text-secondary;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                    }
+                }
+                clock-hit := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    mouse-cursor: pointer;
+                    clicked => { calendar.show(); }
+                }
+            }
+            calendar := PopupWindow {
+                x: parent.width - 252px;
+                y: -(OmniTheme.strip-height + 190px);
+                TaskbarCalendar { month: root.calendar-month; }
+            }
+        }
+
+        bell-btn := StripButton {
+            glyph: "\u{ea8f}";
+            label: "Notifications";
+            selected: root.active-page == 4;
+            badge-count: root.notification-count;
+            activated => { root.open-notifications(); }
+        }
+
+        // Power menu
+        Rectangle {
+            width: OmniTheme.control-size;
+            height: OmniTheme.control-size;
+            power-btn := StripButton {
+                glyph: "\u{e7e8}";
+                label: "Power";
+                activated => { power.show(); }
+            }
+            power := PopupWindow {
+                x: parent.width - 158px;
+                y: -190px;
+                PopupCard {
+                    width: 158px;
+                    height: 176px;
+                    VerticalBox {
+                        padding: 6px;
+                        spacing: 2px;
+                        for action[index] in ["Lock", "Sleep", "Restart", "Shut down", "Sign out"] : PanelButton {
+                            height: 31px;
+                            label: action;
+                            glyph: ["\u{e72e}", "\u{e708}", "\u{e777}", "\u{e7e8}", "\u{e8ac}"][index];
+                            activated => { power.close(); root.action(action); }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Show desktop sliver at the far right edge
+        Rectangle {
+            width: 10px;
+            background: desktop-hit.pressed ? OmniTheme.press-bg : desktop-hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+            Rectangle { x: 0px; width: 1px; background: OmniTheme.glass-border-subtle; }
+            desktop-hit := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                mouse-cursor: pointer;
+                clicked => { root.action("Show desktop"); }
+            }
+        }
+    }
+}

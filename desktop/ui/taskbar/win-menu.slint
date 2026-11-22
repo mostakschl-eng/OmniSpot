@@ -1,0 +1,144 @@
+import { VerticalBox } from "std-widgets.slint";
+import { OmniTheme, PopupCard, Symbol } from "../theme.slint";
+
+export struct WinXItem {
+    label: string,
+    glyph: string,
+    target: string,
+    divider: bool,
+}
+
+// Windows 11 four-pane logo, drawn as shapes so it stays crisp at any scale.
+export component WindowsLogo inherits Rectangle {
+    in property <bool> pressed;
+    width: 20px;
+    height: 20px;
+    property <length> pane: pressed ? 8px : 9px;
+    property <length> offset: pressed ? 1px : 0px;
+    property <color> tone: OmniTheme.dark ? #4cc2ff : #0067c0;
+    property <color> tone-2: OmniTheme.dark ? #2f9bff : #0078d4;
+
+    Rectangle { x: root.offset; y: root.offset; width: root.pane; height: root.pane; border-radius: 1.5px; background: root.tone; }
+    Rectangle { x: parent.width - root.pane - root.offset; y: root.offset; width: root.pane; height: root.pane; border-radius: 1.5px; background: root.tone; }
+    Rectangle { x: root.offset; y: parent.height - root.pane - root.offset; width: root.pane; height: root.pane; border-radius: 1.5px; background: root.tone-2; }
+    Rectangle { x: parent.width - root.pane - root.offset; y: parent.height - root.pane - root.offset; width: root.pane; height: root.pane; border-radius: 1.5px; background: root.tone-2; }
+}
+
+export component WinXRow inherits Rectangle {
+    in property <string> label;
+    in property <string> glyph;
+    in property <bool> selected;
+    callback activated();
+
+    height: 32px;
+    border-radius: OmniTheme.radius-m;
+    background: selected ? OmniTheme.accent.with-alpha(0.18)
+        : hit.pressed ? OmniTheme.press-bg
+        : hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+    animate background { duration: 120ms; }
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.activated(); }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 8px;
+        spacing: 12px;
+        Symbol { width: 18px; font-size: 14px; text: root.glyph; }
+        Text {
+            horizontal-stretch: 1;
+            text: root.label;
+            color: OmniTheme.text-primary;
+            font-size: 13px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+    hit := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}
+
+// The Windows "Win + X" power-user menu. Used in the sidebar and as the right-click menu of the Windows button.
+export component WinXList inherits VerticalLayout {
+    in property <[WinXItem]> items: [
+        { label: "Installed apps", glyph: "\u{e71d}", target: "ms-settings:appsfeatures" },
+        { label: "Power Options", glyph: "\u{e83f}", target: "powercfg.cpl" },
+        { label: "Event Viewer", glyph: "\u{e8fd}", target: "eventvwr.msc" },
+        { label: "System", glyph: "\u{e770}", target: "ms-settings:about" },
+        { label: "Device Manager", glyph: "\u{e772}", target: "devmgmt.msc" },
+        { label: "Network Connections", glyph: "\u{e839}", target: "ncpa.cpl" },
+        { label: "Disk Management", glyph: "\u{eda2}", target: "diskmgmt.msc" },
+        { label: "Computer Management", glyph: "\u{e7f4}", target: "compmgmt.msc" },
+        { label: "Terminal", glyph: "\u{e756}", target: "wt" },
+        { label: "Terminal (Admin)", glyph: "\u{e7ef}", target: "Terminal (Admin)" },
+        { label: "Task Manager", glyph: "\u{e9d9}", target: "taskmgr", divider: true },
+        { label: "File Explorer", glyph: "\u{e838}", target: "explorer" },
+        { label: "Run", glyph: "\u{e768}", target: "Run" },
+        { label: "Desktop", glyph: "\u{e8fc}", target: "Show desktop" },
+    ];
+    callback chosen(string);
+    spacing: 2px;
+
+    for item in root.items : VerticalLayout {
+        spacing: 2px;
+        if item.divider : Rectangle {
+            height: 1px;
+            background: OmniTheme.divider;
+        }
+        WinXRow {
+            label: item.label;
+            glyph: item.glyph;
+            activated => { root.chosen(item.target); }
+        }
+    }
+}
+
+// Round Windows button of the left rail: click opens the Windows tools page, right click the Win + X menu.
+export component RailLogoButton inherits Rectangle {
+    in property <bool> selected;
+    out property <bool> hovered: hit.has-hover;
+    callback activated();
+    callback chosen(string);
+
+    width: 42px;
+    height: 42px;
+    border-radius: 21px;
+    background: selected ? OmniTheme.glass-pill-active-bg
+        : hit.pressed ? OmniTheme.press-bg
+        : hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+    animate background { duration: 120ms; }
+    accessible-role: button;
+    accessible-label: "Windows";
+    accessible-action-default => { root.activated(); }
+
+    WindowsLogo {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        pressed: hit.pressed;
+    }
+    hit := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.right { menu.show(); }
+        }
+    }
+    menu := PopupWindow {
+        x: parent.width + 8px;
+        y: 0px;
+        PopupCard {
+            width: 240px;
+            height: menu-list.preferred-height + 12px;
+            VerticalLayout {
+                padding: 6px;
+                menu-list := WinXList {
+                    chosen(target) => { menu.close(); root.chosen(target); }
+                }
+            }
+        }
+    }
+}

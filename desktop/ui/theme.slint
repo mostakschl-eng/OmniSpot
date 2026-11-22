@@ -22,6 +22,39 @@ export global OmniTheme {
     out property <color> divider: dark ? #ffffff15 : #00000014;
     out property <color> subtle: dark ? #ffffff0f : #00000009;
     out property <color> caution: dark ? #fce100 : #9d5d00;
+    out property <color> glass-bg: dark ? #161822f0 : #f2f4f8f0;
+    out property <color> glass-panel-bg: dark ? #1b1e2af5 : #f8f9fcf5;
+    out property <color> glass-card: dark ? #ffffff10 : #ffffffe0;
+    out property <color> glass-card-hover: dark ? #ffffff1e : #ffffff;
+    out property <color> glass-border: dark ? #ffffff2e : #00000026;
+    out property <color> glass-border-subtle: dark ? #ffffff16 : #0000001a;
+    out property <color> glass-pill-active-bg: dark ? #ffffff : #11131a;
+    out property <color> glass-pill-active-fg: dark ? #11131a : #ffffff;
+    out property <color> glass-pill-hover-bg: dark ? #ffffff1a : #00000012;
+    out property <color> glass-glow: dark ? #00d2ff : #0078d4;
+    out property <color> tile-active: #00c5ff;
+    out property <color> tile-active-hover: #00b0e6;
+    out property <color> tile-active-fg: #04212b;
+    out property <color> badge: #ff4757;
+
+    // Glass surfaces (translucent body + sheen + inner highlight)
+    out property <color> glass-window-bg: dark ? #1a1d28e0 : #f6f8fcea;
+    out property <color> glass-window-solid: dark ? #1a1d28 : #f6f8fc;
+    out property <color> glass-bar-bg: dark ? #12141cf2 : #eef1f7f2;
+    out property <color> glass-highlight: dark ? #ffffff22 : #ffffffcc;
+    out property <color> glass-sheen-top: dark ? #ffffff12 : #ffffff80;
+    out property <color> glass-sheen-bottom: dark ? #ffffff00 : #ffffff00;
+    out property <color> press-bg: dark ? #ffffff10 : #0000000d;
+    out property <color> indicator-idle: dark ? #ffffff8b : #00000073;
+
+    // One set of metrics so every bar, button and radius lines up.
+    out property <length> strip-height: 52px;
+    out property <length> control-size: 40px;
+    out property <length> radius-s: 6px;
+    out property <length> radius-m: 8px;
+    out property <length> radius-l: 12px;
+    out property <length> gap: 4px;
+    out property <length> icon-size: 24px;
 }
 
 export component TextLink inherits FocusScope {
@@ -57,10 +90,32 @@ export component PopupCard inherits Rectangle {
     background: OmniTheme.popup-background;
     border-color: OmniTheme.divider;
     border-width: 1px;
-    border-radius: 12px;
-    drop-shadow-blur: 16px;
-    drop-shadow-offset-y: 4px;
-    drop-shadow-color: OmniTheme.dark ? #00000073 : #00000059;
+    border-radius: 14px;
+    drop-shadow-blur: 18px;
+    drop-shadow-offset-y: 6px;
+    drop-shadow-color: OmniTheme.dark ? #0000008c : #00000045;
+    @children
+}
+
+export component GlassCapsule inherits Rectangle {
+    border-radius: self.height / 2;
+    background: OmniTheme.glass-bg;
+    border-width: 1px;
+    border-color: OmniTheme.glass-border;
+    drop-shadow-blur: 20px;
+    drop-shadow-offset-y: 6px;
+    drop-shadow-color: OmniTheme.dark ? #00000078 : #00000028;
+    @children
+}
+
+export component GlassPanel inherits Rectangle {
+    border-radius: 20px;
+    background: OmniTheme.glass-panel-bg;
+    border-width: 1px;
+    border-color: OmniTheme.glass-border;
+    drop-shadow-blur: 0px;
+    drop-shadow-color: transparent;
+    @children
 }
 
 export component KeyBadge inherits Rectangle {
@@ -85,4 +140,9 @@ export component SettingsCard inherits Rectangle {
     border-width: 1px;
     border-radius: 4px;
     @children
+}
+
+export global Actions {
+    // Runs a real Windows action. Returns false when the target is unknown (UI then shows a preview note).
+    callback run(string) -> bool;
 }

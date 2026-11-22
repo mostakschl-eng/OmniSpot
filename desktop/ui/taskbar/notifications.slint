@@ -42,12 +42,12 @@ export component NotificationList inherits VerticalBox {
         }
     }
     for note[index] in root.notifications : Rectangle {
-        visible: !root.compact || index < 3;
-        height: root.compact ? 44px : 62px;
-        border-radius: 6px;
+        visible: !root.compact || index < 2;
+        height: (root.compact && index >= 2) ? 0px : root.compact ? 44px : 62px;
+        border-radius: 12px;
         border-width: 1px;
-        border-color: OmniTheme.card-border;
-        background: OmniTheme.card-background;
+        border-color: OmniTheme.glass-border-subtle;
+        background: OmniTheme.glass-card;
         HorizontalBox {
             padding: root.compact ? 6px : 10px;
             spacing: 9px;

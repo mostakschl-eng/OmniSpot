@@ -278,6 +278,22 @@ pub fn set_passive_window(handle: isize) {
     hide_from_taskbar(handle, false);
 }
 
+pub fn drag_window(handle: isize) {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+    use windows::Win32::UI::WindowsAndMessaging::{SendMessageW, HTCAPTION, WM_NCLBUTTONDOWN};
+    unsafe {
+        let _ = ReleaseCapture();
+        let hwnd = HWND(handle as *mut _);
+        let _ = SendMessageW(
+            hwnd,
+            WM_NCLBUTTONDOWN,
+            WPARAM(HTCAPTION as usize),
+            LPARAM(0),
+        );
+    }
+}
+
 pub fn set_window_icon(handle: isize) {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};

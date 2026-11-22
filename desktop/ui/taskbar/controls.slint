@@ -1,26 +1,31 @@
 import { HorizontalBox } from "std-widgets.slint";
 import { OmniTheme, Symbol } from "../theme.slint";
 
+// Flat rectangular button used for header actions and popup menu rows.
 export component PanelButton inherits Rectangle {
     in property <string> label;
     in property <string> glyph;
     in property <string> caption: label;
     in property <bool> selected;
     in property <bool> outlined;
+    out property <bool> hovered: hit.has-hover;
     callback activated();
 
     height: 34px;
-    border-radius: 6px;
+    border-radius: 8px;
     border-width: keys.has-focus || outlined ? 1px : 0px;
     border-color: keys.has-focus ? OmniTheme.accent : OmniTheme.divider;
-    background: selected ? OmniTheme.accent.with-alpha(hit.has-hover ? 0.22 : 0.15)
-        : hit.has-hover || outlined ? OmniTheme.subtle : transparent;
+    background: selected ? OmniTheme.accent.with-alpha(hit.has-hover ? 0.26 : 0.18)
+        : hit.has-hover ? OmniTheme.glass-pill-hover-bg
+        : outlined ? OmniTheme.subtle : transparent;
     accessible-role: button;
     accessible-label: label;
     accessible-action-default => { root.activated(); }
     forward-focus: keys;
 
     HorizontalBox {
+        width: parent.width;
+        height: parent.height;
         padding: 8px;
         spacing: 7px;
         alignment: center;
@@ -34,30 +39,234 @@ export component PanelButton inherits Rectangle {
         }
     }
     keys := FocusScope {
+        width: parent.width;
+        height: parent.height;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " { root.activated(); return accept; }
             reject
         }
     }
     hit := TouchArea {
+        width: parent.width;
+        height: parent.height;
         mouse-cursor: pointer;
         clicked => { keys.focus(); root.activated(); }
     }
 }
 
+// Letter badge used while real application icons are not wired in yet.
 export component AppMark inherits Rectangle {
     in property <string> mark;
+    in property <string> glyph;
     in property <color> tint;
     width: 28px;
     height: 28px;
-    border-radius: 6px;
-    background: tint;
-    Text {
+    border-radius: self.width * 0.26;
+    background: @linear-gradient(160deg, root.tint.brighter(0.3) 0%, root.tint.darker(0.25) 100%);
+    border-width: 1px;
+    border-color: #ffffff2a;
+    clip: true;
+
+    // top sheen for a glassy tile
+    Rectangle {
+        y: 0px;
+        width: parent.width;
+        height: parent.height * 0.5;
+        background: @linear-gradient(180deg, #ffffff38 0%, #ffffff00 100%);
+    }
+    if root.glyph != "" : Symbol {
+        width: parent.width;
+        height: parent.height;
+        text: root.glyph;
+        font-size: root.width * 0.56;
+        color: white;
+    }
+    if root.glyph == "" : Text {
+        width: parent.width;
+        height: parent.height;
         text: root.mark;
         color: white;
-        font-size: 15px;
+        font-size: root.mark.character-count > 1 ? root.width * 0.34 : root.width * 0.5;
         font-weight: 700;
         horizontal-alignment: center;
         vertical-alignment: center;
+    }
+}
+
+// Round navigation button of the left rail.
+export component RailIconButton inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> selected;
+    in property <int> badge-count: 0;
+    out property <bool> hovered: hit.has-hover;
+    callback activated();
+
+    width: 42px;
+    height: 42px;
+    border-radius: 21px;
+    background: selected ? OmniTheme.glass-pill-active-bg
+        : hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.activated(); }
+
+    Symbol {
+        width: parent.width;
+        height: parent.height;
+        text: root.glyph;
+        font-size: 17px;
+        color: root.selected ? OmniTheme.glass-pill-active-fg
+            : hit.has-hover ? OmniTheme.text-primary : OmniTheme.text-secondary;
+    }
+
+    if root.badge-count > 0 && !root.selected : Rectangle {
+        x: parent.width - 14px;
+        y: 5px;
+        width: 9px;
+        height: 9px;
+        border-radius: 4.5px;
+        background: OmniTheme.badge;
+    }
+
+    hit := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}
+
+// Filter chip (All / Apps / Windows / ...).
+export component TabPillButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback activated();
+
+    height: 32px;
+    border-radius: 16px;
+    background: selected ? OmniTheme.glass-pill-active-bg
+        : hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.activated(); }
+
+    HorizontalBox {
+        padding-left: 16px;
+        padding-right: 16px;
+        alignment: center;
+        Text {
+            text: root.label;
+            color: root.selected ? OmniTheme.glass-pill-active-fg
+                : hit.has-hover ? OmniTheme.text-primary : OmniTheme.text-secondary;
+            font-size: 13px;
+            font-weight: root.selected ? 600 : 500;
+            vertical-alignment: center;
+        }
+    }
+
+    hit := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}
+
+// Dark / Light switch in the header.
+export component ThemeSwitchPill inherits Rectangle {
+    in property <bool> dark;
+    callback toggle-theme();
+
+    width: 88px;
+    height: 32px;
+    border-radius: 16px;
+    background: hit.has-hover ? OmniTheme.glass-card-hover : OmniTheme.glass-card;
+    border-width: 1px;
+    border-color: OmniTheme.glass-border-subtle;
+    accessible-role: button;
+    accessible-label: "Toggle theme";
+    accessible-action-default => { root.toggle-theme(); }
+
+    HorizontalBox {
+        width: parent.width;
+        height: parent.height;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 6px;
+        alignment: center;
+
+        Symbol {
+            text: root.dark ? "\u{e708}" : "\u{e706}";
+            font-size: 14px;
+            color: OmniTheme.text-primary;
+        }
+
+        Text {
+            text: root.dark ? "Dark" : "Light";
+            font-size: 12px;
+            font-weight: 600;
+            color: OmniTheme.text-primary;
+            vertical-alignment: center;
+        }
+    }
+
+    hit := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.toggle-theme(); }
+    }
+}
+
+// Square glyph button of the bottom taskbar strip, with an optional notification badge.
+export component StripButton inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> selected;
+    in property <int> badge-count: 0;
+    out property <bool> hovered: hit.has-hover;
+    out property <bool> pressed: hit.pressed;
+    callback activated();
+
+    width: OmniTheme.control-size;
+    height: OmniTheme.control-size;
+    border-radius: OmniTheme.radius-m;
+    background: selected ? OmniTheme.accent.with-alpha(hit.pressed ? 0.12 : hit.has-hover ? 0.26 : 0.18)
+        : hit.pressed ? OmniTheme.press-bg
+        : hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+    animate background { duration: 120ms; }
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.activated(); }
+
+    if root.glyph != "" : Symbol {
+        width: parent.width;
+        height: parent.height;
+        text: root.glyph;
+        font-size: 16px;
+    }
+    @children
+    if root.badge-count > 0 : Rectangle {
+        x: parent.width - 18px;
+        y: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        background: OmniTheme.badge;
+        Text {
+            text: root.badge-count > 9 ? "9+" : "" + root.badge-count;
+            color: white;
+            font-size: 9px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    hit := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
     }
 }

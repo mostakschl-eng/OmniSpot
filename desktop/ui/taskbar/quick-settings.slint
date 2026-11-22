@@ -1,23 +1,55 @@
 import { HorizontalBox, ScrollView, Slider, VerticalBox } from "std-widgets.slint";
-import { OmniTheme, Symbol } from "../theme.slint";
+import { Actions, OmniTheme, PopupCard, Symbol } from "../theme.slint";
 import { PanelButton } from "controls.slint";
 import { NotificationList, TaskbarNotification } from "notifications.slint";
-
-component SectionTitle inherits Text {
-    color: OmniTheme.text-primary;
-    font-size: 14px;
-    font-weight: 600;
-    vertical-alignment: center;
-}
 
 component ControlSlider inherits HorizontalBox {
     in property <string> glyph;
     in property <string> label;
+    in property <string> uri;
+    in property <string> uri-label;
     in property <float> initial-value;
+    in-out property <bool> muted: false;
     padding: 0px;
     spacing: 10px;
     height: 28px;
-    Symbol { width: 24px; text: root.glyph; }
+
+    // Icon: left click mutes (volume), right click shows the Windows-style settings tooltip.
+    Rectangle {
+        width: 28px;
+        height: 28px;
+        border-radius: 14px;
+        background: icon-hit.pressed ? OmniTheme.press-bg : icon-hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+        accessible-role: button;
+        accessible-label: root.label;
+        Symbol { text: root.muted ? "\u{e74f}" : root.glyph; font-size: 15px; }
+        icon-hit := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                if root.label == "Volume" { root.muted = !root.muted; Actions.run("media:mute"); }
+            }
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.up && event.button == PointerEventButton.right { menu.show(); }
+            }
+        }
+        menu := PopupWindow {
+            x: 0px;
+            y: parent.height + 4px;
+            PopupCard {
+                width: 210px;
+                height: 42px;
+                PanelButton {
+                    x: 4px;
+                    y: 4px;
+                    width: parent.width - 8px;
+                    height: parent.height - 8px;
+                    glyph: "\u{e8a7}";
+                    label: root.uri-label;
+                    activated => { menu.close(); Actions.run(root.uri); }
+                }
+            }
+        }
+    }
     slider := Slider {
         horizontal-stretch: 1;
         minimum: 0;
@@ -26,12 +58,128 @@ component ControlSlider inherits HorizontalBox {
         accessible-label: root.label;
     }
     Text {
-        width: 40px;
+        width: 36px;
         text: round(slider.value) + "%";
         color: OmniTheme.text-primary;
         horizontal-alignment: right;
         vertical-alignment: center;
         font-size: 12px;
+    }
+}
+component MediaButton inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> prominent;
+    callback activated();
+
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
+    border-width: root.prominent ? 1px : 0px;
+    border-color: OmniTheme.glass-border-subtle;
+    background: root.prominent ? (hit.has-hover ? OmniTheme.glass-card-hover : OmniTheme.glass-card)
+        : hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.activated(); }
+
+    Symbol {
+        width: parent.width;
+        height: parent.height;
+        text: root.glyph;
+        font-size: root.prominent ? 15px : 13px;
+    }
+    hit := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}
+
+component QuickTile inherits VerticalBox {
+    in property <string> label;
+    in property <string> glyph;
+    in property <bool> has-chevron: false;
+    in property <string> uri;
+    in-out property <bool> active: false;
+    callback clicked();
+
+    padding: 0px;
+    spacing: 4px;
+    horizontal-stretch: 1;
+
+    tile-box := Rectangle {
+        height: 40px;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: root.active ? OmniTheme.tile-active : OmniTheme.glass-border-subtle;
+        background: root.active ? (hit.has-hover ? OmniTheme.tile-active-hover : OmniTheme.tile-active)
+            : (hit.has-hover ? OmniTheme.glass-card-hover : OmniTheme.glass-card);
+        accessible-role: button;
+        accessible-label: root.label;
+        accessible-checkable: true;
+        accessible-checked: root.active;
+        accessible-action-default => { root.active = !root.active; root.clicked(); }
+
+        HorizontalBox {
+            width: parent.width;
+            height: parent.height;
+            padding-left: 8px;
+            padding-right: 8px;
+            alignment: center;
+            spacing: 5px;
+
+            Symbol {
+                text: root.glyph;
+                font-size: 16px;
+                color: root.active ? OmniTheme.tile-active-fg : OmniTheme.text-primary;
+            }
+
+            if root.has-chevron : Symbol {
+                text: "\u{e76c}";
+                font-size: 10px;
+                color: root.active ? OmniTheme.tile-active-fg : OmniTheme.text-secondary;
+            }
+        }
+
+        hit := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            mouse-cursor: pointer;
+            clicked => {
+                root.active = !root.active;
+                root.clicked();
+            }
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.up && event.button == PointerEventButton.right && root.uri != "" { menu.show(); }
+            }
+        }
+        menu := PopupWindow {
+            x: 0px;
+            y: parent.height + 4px;
+            PopupCard {
+                width: 214px;
+                height: 42px;
+                PanelButton {
+                    x: 4px;
+                    y: 4px;
+                    width: parent.width - 8px;
+                    height: parent.height - 8px;
+                    glyph: "\u{e8a7}";
+                    label: "Open " + root.label + " settings";
+                    activated => { menu.close(); Actions.run(root.uri); }
+                }
+            }
+        }
+    }
+
+    Text {
+        text: root.label;
+        color: OmniTheme.text-primary;
+        font-size: 11px;
+        horizontal-alignment: center;
+        overflow: elide;
     }
 }
 
@@ -42,47 +190,127 @@ export component QuickSettings inherits ScrollView {
     in property <float> volume;
     in property <float> brightness;
     in property <[TaskbarNotification]> notifications;
+    in property <string> media-app: "Unknown app";
+    in property <string> media-title: "Avengers Doomsday New Teaser Trailer";
+    in property <string> media-artist: "Blayzack";
+    in-out property <bool> media-playing: false;
     callback see-notifications();
+    callback open-settings();
+    callback media-previous();
+    callback media-next();
 
     VerticalBox {
         padding: 0px;
         padding-right: 3px;
-        spacing: 9px;
-        VerticalBox {
-            padding: 0px;
-            spacing: 1px;
-            Text { text: root.time; color: OmniTheme.text-primary; font-size: 28px; font-weight: 600; }
-            Text { text: root.date; color: OmniTheme.text-secondary; font-size: 13px; }
-        }
-        SectionTitle { text: "Quick settings"; }
-        for row in 2 : HorizontalBox {
-            padding: 0px; spacing: 6px;
-            for column in 2 : PanelButton {
-                private property <int> control-index: row * 2 + column;
-                private property <bool> toggled: control-index == 0;
-                horizontal-stretch: 1;
-                height: 32px;
-                label: ["Wi-Fi", "Bluetooth", "Airplane mode", "Do not disturb"][control-index];
-                glyph: ["\u{e701}", "\u{e702}", "\u{e709}", "\u{e708}"][control-index];
-                outlined: true;
-                selected: toggled;
-                activated => { self.toggled = !self.toggled; }
+        spacing: 10px;
+
+        // Media card
+        Rectangle {
+            border-radius: 16px;
+            background: OmniTheme.glass-card;
+            border-width: 1px;
+            border-color: OmniTheme.glass-border-subtle;
+            height: 108px;
+
+            HorizontalBox {
+                padding: 12px;
+                spacing: 12px;
+
+                Rectangle {
+                    width: 56px;
+                    height: 56px;
+                    border-radius: 12px;
+                    background: OmniTheme.accent.with-alpha(0.22);
+                    Symbol { text: "\u{e8d6}"; font-size: 22px; color: OmniTheme.accent; }
+                }
+
+                VerticalBox {
+                    padding: 0px;
+                    spacing: 2px;
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text { text: root.media-app; color: OmniTheme.text-secondary; font-size: 11px; overflow: elide; }
+                    Text { text: root.media-title; color: OmniTheme.text-primary; font-size: 13px; font-weight: 600; overflow: elide; }
+                    Text { text: root.media-artist; color: OmniTheme.text-secondary; font-size: 11px; overflow: elide; }
+                    HorizontalBox {
+                        padding: 0px;
+                        spacing: 10px;
+                        alignment: start;
+                        MediaButton { glyph: "\u{e892}"; label: "Previous track"; activated => { root.media-previous(); } }
+                        MediaButton {
+                            prominent: true;
+                            glyph: root.media-playing ? "\u{e769}" : "\u{e768}";
+                            label: root.media-playing ? "Pause" : "Play";
+                            activated => { root.media-playing = !root.media-playing; Actions.run("media:play"); }
+                        }
+                        MediaButton { glyph: "\u{e893}"; label: "Next track"; activated => { root.media-next(); } }
+                    }
+                }
             }
         }
-        ControlSlider { label: "Volume"; glyph: "\u{e767}"; initial-value: root.volume; }
-        ControlSlider { label: "Brightness"; glyph: "\u{e706}"; initial-value: root.brightness; }
-        if root.battery-description != "" : HorizontalBox {
-            height: 35px;
-            padding: 0px;
-            spacing: 8px;
-            Symbol { width: 24px; text: "\u{e850}"; }
+
+        // Quick settings card
+        Rectangle {
+            border-radius: 16px;
+            background: OmniTheme.glass-card;
+            border-width: 1px;
+            border-color: OmniTheme.glass-border-subtle;
+
             VerticalBox {
-                padding: 0px; spacing: 0px; alignment: center; horizontal-stretch: 1;
-                SectionTitle { text: "Battery"; }
-                Text { text: root.battery-description; color: OmniTheme.text-secondary; font-size: 12px; }
+                padding: 12px;
+                spacing: 10px;
+
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 8px;
+                    QuickTile { uri: "ms-settings:network-wifi"; label: "Wi-Fi"; glyph: "\u{e701}"; has-chevron: true; active: true; }
+                    QuickTile { uri: "ms-settings:bluetooth"; label: "Bluetooth"; glyph: "\u{e702}"; has-chevron: true; active: true; }
+                    QuickTile { uri: "ms-settings:network-airplanemode"; label: "Airplane mode"; glyph: "\u{e709}"; active: false; }
+                }
+
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 8px;
+                    QuickTile { uri: "ms-settings:nightlight"; label: "Night light"; glyph: "\u{e706}"; active: true; }
+                    QuickTile { uri: "ms-settings:easeofaccess"; label: "Accessibility"; glyph: "\u{e776}"; has-chevron: true; active: false; }
+                    QuickTile { uri: "ms-settings:batterysaver"; label: "Energy saver"; glyph: "\u{ec0a}"; active: false; }
+                }
+
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 8px;
+                    QuickTile { uri: "ms-settings:easeofaccess-closedcaptioning"; label: "Live captions"; glyph: "\u{e890}"; active: false; }
+                    QuickTile { uri: "ms-settings:crossdevice"; label: "Nearby sharing"; glyph: "\u{e72d}"; active: false; }
+                    QuickTile { uri: "ms-settings:display"; label: "Wired display"; glyph: "\u{e7f4}"; has-chevron: true; active: true; }
+                }
+
+                Rectangle { height: 1px; background: OmniTheme.divider; }
+
+                ControlSlider { uri: "ms-settings:sound"; uri-label: "Sound settings"; label: "Volume"; glyph: "\u{e767}"; initial-value: root.volume; }
+                ControlSlider { uri: "ms-settings:display"; uri-label: "Display settings"; label: "Brightness"; glyph: "\u{e706}"; initial-value: root.brightness; }
+
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 8px;
+                    alignment: space-between;
+
+                    HorizontalBox {
+                        padding: 0px;
+                        spacing: 6px;
+                        Symbol { width: 18px; font-size: 14px; text: "\u{e850}"; }
+                        Text {
+                            text: root.battery-description != "" ? root.battery-description : "100%";
+                            color: OmniTheme.text-secondary;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                        }
+                    }
+
+
+                }
             }
         }
-        Rectangle { height: 1px; background: OmniTheme.divider; }
+
         NotificationList {
             compact: true;
             notifications: root.notifications;

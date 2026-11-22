@@ -21,3 +21,9 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

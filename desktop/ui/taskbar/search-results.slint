@@ -30,6 +30,14 @@ export component SearchResults inherits VerticalBox {
             activated => { root.filter = index; root.selected-index = 0; }
         }
     }
+    if root.rows.length == 0 : Text {
+        vertical-stretch: 1;
+        text: "No results";
+        color: OmniTheme.text-secondary;
+        font-size: 13px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
     ScrollView {
         vertical-stretch: 1;
         VerticalBox {
@@ -47,12 +55,13 @@ export component SearchResults inherits VerticalBox {
                     vertical-alignment: center;
                 }
                 Rectangle {
-                    height: 53px;
-                    border-radius: 7px;
-                    border-width: keys.has-focus ? 1px : 0px;
-                    border-color: OmniTheme.accent;
-                    background: index == root.selected-index ? OmniTheme.accent.with-alpha(hit.has-hover ? 0.22 : 0.15)
-                        : hit.has-hover ? OmniTheme.subtle : transparent;
+                    height: 54px;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: index == root.selected-index ? (OmniTheme.dark ? #ffffff55 : OmniTheme.accent)
+                        : OmniTheme.glass-border-subtle;
+                    background: index == root.selected-index ? (OmniTheme.dark ? #ffffff20 : OmniTheme.accent.with-alpha(0.18))
+                        : hit.has-hover ? OmniTheme.glass-card-hover : OmniTheme.glass-card;
                     accessible-role: button;
                     accessible-label: row.title;
                     accessible-action-default => { root.selected-index = index; root.result-selected(row.title); }
@@ -74,6 +83,8 @@ export component SearchResults inherits VerticalBox {
                         Symbol { width: 16px; text: "\u{e76c}"; font-size: 11px; color: OmniTheme.text-secondary; }
                     }
                     keys := FocusScope {
+                        width: parent.width;
+                        height: parent.height;
                         key-pressed(event) => {
                             if event.text == Key.Return || event.text == " " {
                                 root.selected-index = index;
@@ -84,6 +95,8 @@ export component SearchResults inherits VerticalBox {
                         }
                     }
                     hit := TouchArea {
+                        width: parent.width;
+                        height: parent.height;
                         mouse-cursor: pointer;
                         clicked => { keys.focus(); root.selected-index = index; root.result-selected(row.title); }
                     }

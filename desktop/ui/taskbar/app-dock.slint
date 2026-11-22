@@ -5,8 +5,10 @@ import { AppMark } from "controls.slint";
 export struct DockApp {
     name: string,
     mark: string,
+    glyph: string,
     tint: color,
     windows: int,
+    active: bool,
 }
 
 export component AppDock inherits HorizontalBox {
@@ -14,37 +16,78 @@ export component AppDock inherits HorizontalBox {
     out property <string> hovered-app;
     callback app-selected(string);
     private property <int> selected: -1;
-    height: 54px;
+    height: OmniTheme.strip-height;
     alignment: center;
     padding: 0px;
-    spacing: 5px;
+    spacing: OmniTheme.gap;
 
     for app[index] in root.apps : Rectangle {
         width: 44px;
-        height: 47px;
-        border-radius: 8px;
+        height: OmniTheme.control-size;
+        border-radius: OmniTheme.radius-m;
         border-width: keys.has-focus ? 1px : 0px;
         border-color: OmniTheme.accent;
-        background: root.selected == index ? OmniTheme.accent.with-alpha(0.15)
+        background: hit.pressed ? OmniTheme.press-bg
+            : app.active ? OmniTheme.glass-pill-hover-bg
             : hit.has-hover ? OmniTheme.subtle : transparent;
+        animate background { duration: 120ms; }
         accessible-role: button;
         accessible-label: app.name + (app.windows > 0 ? ", open windows: " + app.windows : ", pinned");
         accessible-action-default => { root.select-app(index, app.name); }
-        AppMark { x: 8px; y: 6px; mark: app.mark; tint: app.tint; }
-        if app.windows > 0 : Rectangle {
-            width: app.windows > 1 ? 12px : 5px;
-            height: 4px;
-            y: 38px;
-            border-radius: 2px;
-            background: OmniTheme.accent;
+
+        AppMark {
+            x: (parent.width - self.width) / 2;
+            y: hit.pressed ? 8px : 6px;
+            width: OmniTheme.icon-size;
+            height: OmniTheme.icon-size;
+            mark: app.mark;
+            glyph: app.glyph;
+            tint: app.tint;
+            animate y { duration: 90ms; }
         }
+
+        // Running indicator: long accent pill when focused, short grey pill when idle.
+        if app.windows > 0 : Rectangle {
+            width: app.active ? 16px : 6px;
+            height: 3px;
+            x: (parent.width - self.width) / 2;
+            y: parent.height - 6px;
+            border-radius: 1.5px;
+            background: app.active ? OmniTheme.accent : OmniTheme.indicator-idle;
+            animate width { duration: 150ms; }
+        }
+
+        // Small count dot when an app has several windows.
+        if app.windows > 1 : Rectangle {
+            x: parent.width - 12px;
+            y: 3px;
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: OmniTheme.glass-window-solid;
+            border-width: 1px;
+            border-color: OmniTheme.glass-border-subtle;
+            Text {
+                text: app.windows;
+                color: OmniTheme.text-primary;
+                font-size: 8px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
         keys := FocusScope {
+            width: parent.width;
+            height: parent.height;
             key-pressed(event) => {
                 if event.text == Key.Return || event.text == " " { root.select-app(index, app.name); return accept; }
                 reject
             }
         }
         hit := TouchArea {
+            width: parent.width;
+            height: parent.height;
             mouse-cursor: pointer;
             changed has-hover => {
                 if self.has-hover { root.hovered-app = app.name; }
