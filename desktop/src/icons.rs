@@ -7,6 +7,9 @@ thread_local! {
 }
 
 pub fn load(path: &str) -> Image {
+    if path.is_empty() {
+        return Image::default();
+    }
     ICONS.with(|icons| {
         let mut icons = icons.borrow_mut();
         if let Some(image) = icons.get(path) {
@@ -20,9 +23,7 @@ pub fn load(path: &str) -> Image {
         }
         .or_else(|| {
             shell_icon(path).map(|pixels| {
-                Image::from_rgba8(SharedPixelBuffer::clone_from_slice(
-                    &pixels, ICON_SIZE, ICON_SIZE,
-                ))
+                Image::from_rgba8(SharedPixelBuffer::clone_from_slice(&pixels, ICON_SIZE, ICON_SIZE))
             })
         })
         .unwrap_or_default();

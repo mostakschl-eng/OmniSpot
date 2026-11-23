@@ -28,6 +28,7 @@ pub(crate) enum KeyTransition {
     UnrelatedKeyReset,
     AltTabSwitched(i32),
     SpotlightShortcutPressed,
+    TaskbarShortcutPressed,
     NoOp,
 }
 
@@ -36,6 +37,7 @@ pub(crate) struct KeyStateMachine {
     configured_modifier: u32,
     spotlight_modifier: u32,
     spotlight_enabled: bool,
+    taskbar_modifier: Option<u32>,
     held_keyboard_modifiers: HashSet<u32>,
     alt_held: bool,
     alt_tab_active: bool,
@@ -51,6 +53,7 @@ impl Default for KeyStateMachine {
             configured_modifier: NONE,
             spotlight_modifier: LEFT_ALT,
             spotlight_enabled: true,
+            taskbar_modifier: None,
             held_keyboard_modifiers: HashSet::new(),
             alt_held: false,
             alt_tab_active: false,
@@ -73,7 +76,12 @@ impl KeyStateMachine {
         )
     }
 
+    #[cfg(test)]
     pub fn process_key_down(&mut self, key: u32) -> KeyTransition {
+        self.process_key_down_with_alt(key, false)
+    }
+
+    pub fn process_key_down_with_alt(&mut self, key: u32, alt_down: bool) -> KeyTransition {
         use KeyTransition::*;
         if matches!(
             key,
@@ -81,11 +89,23 @@ impl KeyStateMachine {
         ) {
             self.held_keyboard_modifiers.insert(key);
         }
-        if self.spotlight_enabled && key == SPACE && self.is_spotlight_modifier_held() {
+        let popup = match key {
+            SPACE if self.spotlight_enabled && self.is_modifier_family_held(self.spotlight_modifier) => {
+                Some(SpotlightShortcutPressed)
+            }
+            F2 if self.taskbar_modifier.is_some_and(|modifier| {
+                self.is_modifier_family_held(modifier)
+                    || (alt_down && matches!(modifier, LEFT_ALT | RIGHT_ALT))
+            }) => {
+                Some(TaskbarShortcutPressed)
+            }
+            _ => None,
+        };
+        if let Some(popup) = popup {
             if self.state != State::Idle {
                 self.state = State::ModifierHeldWithActionKey;
             }
-            return SpotlightShortcutPressed;
+            return popup;
         }
         if key != self.configured_modifier {
             if let Some(transition) = self.handle_alt_tab_tracking(key) {
@@ -195,6 +215,10 @@ impl KeyStateMachine {
         self.reset_alt_tab_state();
     }
 
+    pub fn set_taskbar_modifier(&mut self, modifier: u32) {
+        self.taskbar_modifier = Some(modifier);
+    }
+
     fn reset_alt_tab_state(&mut self) {
         self.alt_held = false;
         self.alt_tab_active = false;
@@ -202,13 +226,13 @@ impl KeyStateMachine {
         self.alt_nav_count = 0;
     }
 
-    fn is_spotlight_modifier_held(&self) -> bool {
-        let family: &[u32] = match self.spotlight_modifier {
+    fn is_modifier_family_held(&self, modifier: u32) -> bool {
+        let family: &[u32] = match modifier {
             LEFT_ALT | RIGHT_ALT => &[LEFT_ALT, RIGHT_ALT],
             LEFT_CTRL | RIGHT_CTRL => &[LEFT_CTRL, RIGHT_CTRL],
             LEFT_SHIFT | RIGHT_SHIFT => &[LEFT_SHIFT, RIGHT_SHIFT],
             LWIN | RWIN => &[LWIN, RWIN],
-            _ => std::slice::from_ref(&self.spotlight_modifier),
+            _ => std::slice::from_ref(&modifier),
         };
         family
             .iter()

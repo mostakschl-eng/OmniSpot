@@ -19,6 +19,7 @@ pub(crate) const Z: u32 = 69;
 pub(crate) const LWIN: u32 = 70;
 pub(crate) const RWIN: u32 = 71;
 pub(crate) const APPS: u32 = 72;
+pub(crate) const F2: u32 = 91;
 pub(crate) const LEFT_SHIFT: u32 = 116;
 pub(crate) const RIGHT_SHIFT: u32 = 117;
 pub(crate) const LEFT_CTRL: u32 = 118;

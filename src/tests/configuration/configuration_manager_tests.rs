@@ -31,6 +31,8 @@ fn make_test_config() -> Configuration {
         spotlight_enabled: true,
         spotlight_modifier: LEFT_ALT,
         spotlight_custom_directories: None,
+        hide_windows_taskbar: false,
+        taskbar_modifier: crate::input::keyboard_input::LEFT_ALT,
     }
 }
 

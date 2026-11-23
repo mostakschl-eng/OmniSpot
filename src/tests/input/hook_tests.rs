@@ -1,7 +1,7 @@
 use super::*;
 use crate::configuration::app_theme_setting::AppThemeSetting;
 use crate::configuration::configuration::ApplicationConfiguration;
-use crate::input::keyboard_input::{A, CAPITAL, LEFT_ALT, LWIN, RIGHT_ALT, TAB};
+use crate::input::keyboard_input::{A, CAPITAL, LEFT_ALT, LWIN, RIGHT_ALT, SPACE, TAB};
 use crate::window_discovery::packaged_apps_service::PackagedAppsService;
 use crate::window_discovery::window_enumerator::WindowEnumerator;
 
@@ -84,6 +84,8 @@ fn config() -> Configuration {
         spotlight_enabled: true,
         spotlight_modifier: LEFT_ALT,
         spotlight_custom_directories: None,
+        hide_windows_taskbar: false,
+        taskbar_modifier: crate::input::keyboard_input::LEFT_ALT,
     }
 }
 

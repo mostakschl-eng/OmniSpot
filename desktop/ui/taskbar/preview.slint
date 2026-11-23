@@ -1,13 +1,22 @@
 import { TaskbarWindow } from "taskbar-window.slint";
 import { TaskbarResult } from "search-results.slint";
+import { DockApp } from "app-dock.slint";
+import { CalendarMonth } from "calendar.slint";
 
 export component TaskbarPreview inherits TaskbarWindow {
     callback close-preview();
     callback toggle-test(bool);
     callback request-drag();
+    in property <string> action-status;
+    in property <bool> above-other-windows: true;
     in property <bool> test-active;
     in property <int> test-seconds;
     in property <string> test-status;
+    in property <[DockApp]> live-apps;
+    in property <string> clock-time;
+    in property <string> clock-date;
+    in property <string> clock-short-date;
+    in property <CalendarMonth> clock-month;
     private property <bool> notifications-cleared;
     private property <TaskbarResult> project: {
         group-title: "Best match", title: "Microsoft Project", detail: "App",
@@ -51,10 +60,10 @@ export component TaskbarPreview inherits TaskbarWindow {
     taskbar-test-seconds: root.test-seconds;
     taskbar-test-status: root.test-status;
     toggle-taskbar-test(active) => { root.toggle-test(active); }
-    time: "8:17 PM";
-    date: "Saturday, November 21, 2026";
-    short-date: "11/21/2026";
-    calendar-month: { label: "November 2026", first-weekday: 0, days: 30, today: 21 };
+    time: root.clock-time;
+    date: root.clock-date;
+    short-date: root.clock-short-date;
+    calendar-month: root.clock-month;
     battery-description: "87% · 5 h 12 min remaining";
     volume: 67;
     brightness: 72;
@@ -78,23 +87,15 @@ export component TaskbarPreview inherits TaskbarWindow {
         : root.query == "" ? [root.word, root.project, root.settings]
         : [root.project, root.word, root.slides, root.sheet, root.web];
 
-    apps: [
-        { name: "Microsoft Edge", mark: "e", glyph: "\u{e774}", tint: #0f8fa8, windows: 2, active: true },
-        { name: "File Explorer", mark: "F", glyph: "\u{e838}", tint: #e0a20f, windows: 1 },
-        { name: "Word", mark: "W", tint: #185abd, windows: 1 },
-        { name: "Excel", mark: "X", tint: #1d7a46, windows: 1 },
-        { name: "PowerPoint", mark: "P", tint: #c5432a, windows: 1 },
-        { name: "Teams", mark: "T", glyph: "\u{e8bd}", tint: #5b5fc7, windows: 2 },
-        { name: "Outlook", mark: "O", glyph: "\u{e715}", tint: #0f6cbd, windows: 1 },
-        { name: "Visual Studio Code", mark: "</>", glyph: "\u{e943}", tint: #1b82d1, windows: 1 },
-        { name: "Figma", mark: "F", glyph: "\u{e790}", tint: #7a4cc2, windows: 0 },
-    ];
+    apps: root.live-apps;
     notifications: root.notifications-cleared ? [] : [
         { app: "Snipping Tool", message: "Screenshot copied to clipboard", time: "10:32 AM", mark: "S", tint: #2374a3 },
         { app: "Mail", message: "Project update from Daniel", time: "9:48 AM", mark: "M", tint: #0068aa },
         { app: "Teams", message: "Meeting in 10 minutes – Project Sync", time: "9:20 AM", mark: "T", tint: #5558a8 },
     ];
     clear-notifications => { root.notifications-cleared = true; }
-    dismiss => { root.close-preview(); }
+    dismiss => { root.fullscreen = false; root.close-preview(); }
     drag-window => { root.request-drag(); }
+    action-feedback: root.action-status;
+    keep-above: root.above-other-windows;
 }

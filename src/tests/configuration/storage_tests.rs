@@ -84,6 +84,8 @@ fn settings_document_to_configuration_maps_all_fields() {
         spotlight_enabled: true,
         spotlight_modifier: LEFT_ALT,
         spotlight_custom_directories: None,
+        hide_windows_taskbar: true,
+        taskbar_modifier: crate::input::keyboard_input::LEFT_ALT,
     };
 
     let result = doc.to_configuration();
@@ -92,6 +94,7 @@ fn settings_document_to_configuration_maps_all_fields() {
     assert_eq!(result.theme, AppThemeSetting::Dark);
     assert!(result.overlay_enabled);
     assert_eq!(result.overlay_show_delay_ms, 500);
+    assert!(result.hide_windows_taskbar);
 }
 
 #[test]
@@ -117,6 +120,8 @@ fn settings_document_from_configuration_maps_all_fields() {
         spotlight_enabled: true,
         spotlight_modifier: LEFT_ALT,
         spotlight_custom_directories: None,
+        hide_windows_taskbar: true,
+        taskbar_modifier: crate::input::keyboard_input::LEFT_ALT,
     };
 
     let result = SettingsDocument::from_configuration(&config, 42);
@@ -125,6 +130,7 @@ fn settings_document_from_configuration_maps_all_fields() {
     assert_eq!(result.applications.len(), 1);
     assert_eq!(result.applications[0].key, KEY_B);
     assert_eq!(result.theme, AppThemeSetting::Light);
+    assert!(result.hide_windows_taskbar);
 }
 
 #[test]
@@ -160,6 +166,8 @@ fn settings_document_round_trip_preserves_all_data() {
         spotlight_enabled: true,
         spotlight_modifier: LEFT_ALT,
         spotlight_custom_directories: None,
+        hide_windows_taskbar: true,
+        taskbar_modifier: crate::input::keyboard_input::LEFT_ALT,
     };
 
     let round_tripped = SettingsDocument::from_configuration(&original, 1).to_configuration();

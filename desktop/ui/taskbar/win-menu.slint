@@ -97,7 +97,7 @@ export component WinXList inherits VerticalLayout {
     }
 }
 
-// Round Windows button of the left rail: click opens the Windows tools page, right click the Win + X menu.
+// Click opens the Windows tools page, right click opens the Win + X menu.
 export component RailLogoButton inherits Rectangle {
     in property <bool> selected;
     out property <bool> hovered: hit.has-hover;

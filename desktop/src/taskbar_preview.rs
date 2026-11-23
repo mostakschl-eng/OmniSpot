@@ -1,28 +1,95 @@
 use std::cell::RefCell;
 use std::io::Read;
 use std::os::windows::process::CommandExt;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use omnispot_spotlight_native::desktop;
 use slint::{ComponentHandle, Timer, TimerMode};
 
-use crate::TaskbarPreview;
+use crate::{taskbar_actions, taskbar_dock::Dock, SettingsWindow, TaskbarPreview};
 
 pub const TEST_WORKER_ARG: &str = "--taskbar-visibility-test-worker";
 
+pub struct Taskbar {
+    pub window: TaskbarPreview,
+    _test_timer: Timer,
+    _refresh_timer: Timer,
+    dock: Rc<RefCell<Dock>>,
+}
+
+impl Taskbar {
+    pub fn opened(&self, previous_foreground: isize) {
+        refresh_clock(&self.window);
+        self.dock.borrow_mut().opened(previous_foreground);
+    }
+}
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let taskbar = create_taskbar(None)?;
+    let foreground = desktop::foreground_window_handle();
+    taskbar.window.show()?;
+    if let Some(handle) = crate::host::hwnd(taskbar.window.window()) {
+        desktop::raise_taskbar_window(handle);
+    }
+    taskbar.opened(foreground);
+    slint::run_event_loop()?;
+    Ok(())
+}
+
+pub fn create_taskbar(
+    settings: Option<slint::Weak<SettingsWindow>>,
+) -> Result<Taskbar, slint::PlatformError> {
     let window = TaskbarPreview::new()?;
     crate::brand_window(window.window());
-    window.global::<crate::Actions>().on_run(|target| launch(target.as_str()));
+    let dock = Rc::new(RefCell::new(Dock::new()));
+    let action_dock = dock.clone();
+    let sender = taskbar_actions::start_worker(4).ok();
+    let action_window = window.as_weak();
+    window.global::<crate::Actions>().on_run(move |target| {
+        let Some(window) = action_window.upgrade() else { return false };
+        if target == "OmniSpot Settings" {
+            if let Some(settings) = settings.as_ref().and_then(slint::Weak::upgrade) {
+                if settings.show().is_err() {
+                    window.set_action_status("Could not open OmniSpot Settings.".into());
+                    return false;
+                }
+                window.set_above_other_windows(false);
+                if let Some(handle) = crate::host::hwnd(settings.window()) {
+                    desktop::focus_window(handle);
+                }
+                return true;
+            }
+        }
+        let resolved = action_dock.borrow().action_for(target.as_str())
+            .or_else(|| taskbar_actions::resolve(target.as_str()).map(|action| (target.to_string(), action)));
+        let Some((label, action)) = resolved else { return false };
+        let action_result = action_window.clone();
+        let accepted = sender.as_ref().is_some_and(|sender| sender.try_send(Box::new(move || {
+            let opens_window = action.opens_window();
+            let succeeded = action.run();
+            let _ = action_result.upgrade_in_event_loop(move |window| {
+                if succeeded {
+                    if opens_window {
+                        window.set_above_other_windows(false);
+                    }
+                    window.set_action_status("".into());
+                } else {
+                    window.set_action_status(format!("Could not run {label}.").into());
+                }
+            });
+        })).is_ok());
+        window.set_action_status(if accepted { "".into() } else { "Taskbar actions are busy. Try again shortly.".into() });
+        accepted
+    });
     window.set_test_seconds(desktop::TASKBAR_TEST_SECONDS as i32);
 
     let weak = window.as_weak();
     window.on_request_drag(move || {
-        if let Some(window) = weak.upgrade() {
+        let _ = weak.upgrade_in_event_loop(|window| {
             crate::drag_window(window.window());
-        }
+        });
     });
 
     let worker = Rc::new(RefCell::new(None::<Child>));
@@ -41,7 +108,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         if running.is_some() {
             return;
         }
-        match start_worker() {
+        match start_worker(false) {
             Ok(child) => {
                 *running = Some(child);
                 window.set_test_active(true);
@@ -52,7 +119,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let weak = window.as_weak();
+    let running = worker.clone();
     window.on_close_preview(move || {
+        if let Some(child) = running.borrow_mut().as_mut() {
+            child.stdin.take();
+        }
         if let Some(window) = weak.upgrade() {
             let _ = window.hide();
         }
@@ -65,14 +136,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let Some(child) = worker.as_mut() else { return };
         let result = match child.try_wait() {
             Ok(None) => return,
-            Ok(Some(status)) if status.success() => "Windows taskbar restored.".into(),
-            Ok(Some(_)) => {
-                let mut message = String::new();
-                if let Some(mut stderr) = child.stderr.take() {
-                    let _ = stderr.read_to_string(&mut message);
-                }
-                format!("Taskbar test failed. {}", message.trim())
-            }
+            Ok(Some(status)) => match worker_result(child, status) {
+                Ok(()) => "Windows taskbar restored.".into(),
+                Err(error) => format!("Taskbar test failed. {error}"),
+            },
             Err(error) => format!("Could not check the taskbar test. {error}"),
         };
         *worker = None;
@@ -81,73 +148,63 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             window.set_test_status(result.into());
         }
     });
-    window.run()?;
-    Ok(())
+
+    let current_dock = dock.clone();
+    let weak = window.as_weak();
+    let mut next_clock = Instant::now();
+    let refresh_timer = Timer::default();
+    refresh_timer.start(TimerMode::Repeated, Duration::from_millis(100), move || {
+        let Some(window) = weak.upgrade() else { return };
+        if !window.window().is_visible() {
+            return;
+        }
+        let now = Instant::now();
+        if now >= next_clock {
+            refresh_clock(&window);
+            next_clock = now + Duration::from_secs(1);
+        }
+        current_dock.borrow_mut().refresh(&window, now);
+    });
+    Ok(Taskbar { window, _test_timer: timer, _refresh_timer: refresh_timer, dock })
 }
 
-fn start_worker() -> std::io::Result<Child> {
+fn refresh_clock(window: &TaskbarPreview) {
+    let clock = desktop::taskbar_clock();
+    window.set_clock_time(clock.time.into());
+    window.set_clock_date(clock.date.into());
+    window.set_clock_short_date(clock.short_date.into());
+    window.set_clock_month(crate::CalendarMonth {
+        label: clock.month.into(),
+        first_weekday: clock.first_weekday,
+        days: clock.days,
+        today: clock.today,
+    });
+}
+
+pub fn start_worker(persistent: bool) -> std::io::Result<Child> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    Command::new(std::env::current_exe()?)
-        .arg(TEST_WORKER_ARG)
+    let mut command = Command::new(std::env::current_exe()?);
+    command.arg(TEST_WORKER_ARG);
+    if persistent {
+        command.arg("--persistent");
+    }
+    command
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
 }
 
-
-
-/// Runs a real Windows action for a taskbar button. Returns false for unknown targets.
-fn launch(target: &str) -> bool {
-    const NO_WINDOW: u32 = 0x0800_0000;
-    let spawn = |program: &str, args: &[&str]| {
-        Command::new(program).args(args).creation_flags(NO_WINDOW).spawn().is_ok()
-    };
-    let start = |what: &str| spawn("cmd", &["/C", "start", "", what]);
-    let key = |code: u32| {
-        spawn(
-            "powershell",
-            &["-NoProfile", "-WindowStyle", "Hidden", "-Command", &format!("(New-Object -ComObject WScript.Shell).SendKeys([char]{code})")],
-        )
-    };
-    match target {
-        // power
-        "Lock" => spawn("rundll32.exe", &["user32.dll,LockWorkStation"]),
-        "Sleep" => spawn("rundll32.exe", &["powrprof.dll,SetSuspendState", "0,1,0"]),
-        "Restart" => spawn("shutdown", &["/r", "/t", "0"]),
-        "Shut down" => spawn("shutdown", &["/s", "/t", "0"]),
-        "Sign out" => spawn("shutdown", &["/l"]),
-        // desktop / shell
-        "Show desktop" => spawn(
-            "powershell",
-            &["-NoProfile", "-WindowStyle", "Hidden", "-Command", "(New-Object -ComObject Shell.Application).ToggleDesktop()"],
-        ),
-        "Run" => spawn("explorer.exe", &["shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}"]),
-        "Terminal (Admin)" => spawn(
-            "powershell",
-            &["-NoProfile", "-WindowStyle", "Hidden", "-Command", "Start-Process wt -Verb RunAs"],
-        ),
-        "powercfg.cpl" | "eventvwr.msc" | "devmgmt.msc" | "ncpa.cpl" | "diskmgmt.msc" | "compmgmt.msc" | "wt"
-        | "taskmgr" | "explorer" => start(target),
-        // media keys
-        "media:prev" => key(177),
-        "media:next" => key(176),
-        "media:play" => key(179),
-        "media:mute" => key(173),
-        // dock apps
-        "Microsoft Edge" => start("msedge"),
-        "File Explorer" => start("explorer"),
-        "Word" => start("winword"),
-        "Excel" => start("excel"),
-        "PowerPoint" => start("powerpnt"),
-        "Teams" => start("ms-teams:"),
-        "Outlook" => start("outlook"),
-        "Visual Studio Code" => start("code"),
-        // search result shortcuts
-        "Network & internet" => start("ms-settings:network"),
-        "Sound" => start("ms-settings:sound"),
-        "Display" => start("ms-settings:display"),
-        other if other.starts_with("ms-settings:") => start(other),
-        _ => false,
+pub fn worker_result(child: &mut Child, status: ExitStatus) -> Result<(), String> {
+    if status.success() {
+        return Ok(());
     }
+    let mut message = String::new();
+    if let Some(mut stderr) = child.stderr.take() {
+        let _ = stderr.read_to_string(&mut message);
+    }
+    if message.trim().is_empty() {
+        return Err(format!("The taskbar visibility worker exited with {status}."));
+    }
+    Err(message.trim().to_owned())
 }

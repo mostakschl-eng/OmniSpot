@@ -1,8 +1,16 @@
-import { HorizontalBox } from "std-widgets.slint";
-import { OmniTheme } from "../theme.slint";
-import { AppMark } from "controls.slint";
+import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, PopupCard } from "../theme.slint";
+import { AppMark, PanelButton } from "controls.slint";
+
+export struct DockWindow {
+    key: string,
+    title: string,
+}
 
 export struct DockApp {
+    id: string,
+    icon: image,
+    window-list: [DockWindow],
     name: string,
     mark: string,
     glyph: string,
@@ -15,14 +23,13 @@ export component AppDock inherits HorizontalBox {
     in property <[DockApp]> apps;
     out property <string> hovered-app;
     callback app-selected(string);
-    private property <int> selected: -1;
     height: OmniTheme.strip-height;
     alignment: center;
     padding: 0px;
     spacing: OmniTheme.gap;
 
-    for app[index] in root.apps : Rectangle {
-        width: 44px;
+    for app in root.apps : item := Rectangle {
+        width: 38px;
         height: OmniTheme.control-size;
         border-radius: OmniTheme.radius-m;
         border-width: keys.has-focus ? 1px : 0px;
@@ -33,17 +40,48 @@ export component AppDock inherits HorizontalBox {
         animate background { duration: 120ms; }
         accessible-role: button;
         accessible-label: app.name + (app.windows > 0 ? ", open windows: " + app.windows : ", pinned");
-        accessible-action-default => { root.select-app(index, app.name); }
+        accessible-action-default => { item.open(); }
+        function open() {
+            if app.window-list.length > 1 { picker.show(); }
+            else { root.app-selected(app.id != "" ? app.id : app.name); }
+        }
 
-        AppMark {
+        if app.icon.width == 0 : AppMark {
             x: (parent.width - self.width) / 2;
-            y: hit.pressed ? 8px : 6px;
-            width: OmniTheme.icon-size;
-            height: OmniTheme.icon-size;
+            y: hit.pressed ? 10px : 8px;
+            width: 22px;
+            height: 22px;
             mark: app.mark;
             glyph: app.glyph;
             tint: app.tint;
             animate y { duration: 90ms; }
+        }
+        if app.icon.width > 0 : Image {
+            x: (parent.width - self.width) / 2;
+            y: hit.pressed ? 10px : 8px;
+            width: 22px;
+            height: 22px;
+            source: app.icon;
+            image-fit: contain;
+        }
+
+        picker := PopupWindow {
+            x: 0px;
+            y: -card.height - 8px;
+            card := PopupCard {
+                width: 250px;
+                height: min(228px, app.window-list.length * 34px + 10px);
+                ScrollView {
+                    x: 5px; y: 5px; width: parent.width - 10px; height: parent.height - 10px;
+                    VerticalBox {
+                        padding: 0px; spacing: 0px;
+                        for window in app.window-list : PanelButton {
+                            label: window.title;
+                            activated => { picker.close(); root.app-selected(window.key); }
+                        }
+                    }
+                }
+            }
         }
 
         // Running indicator: long accent pill when focused, short grey pill when idle.
@@ -81,7 +119,7 @@ export component AppDock inherits HorizontalBox {
             width: parent.width;
             height: parent.height;
             key-pressed(event) => {
-                if event.text == Key.Return || event.text == " " { root.select-app(index, app.name); return accept; }
+                if event.text == Key.Return || event.text == " " { item.open(); return accept; }
                 reject
             }
         }
@@ -93,12 +131,8 @@ export component AppDock inherits HorizontalBox {
                 if self.has-hover { root.hovered-app = app.name; }
                 else if root.hovered-app == app.name { root.hovered-app = ""; }
             }
-            clicked => { keys.focus(); root.select-app(index, app.name); }
+            clicked => { keys.focus(); item.open(); }
         }
     }
 
-    function select-app(index: int, name: string) {
-        root.selected = index;
-        root.app-selected(name);
-    }
 }

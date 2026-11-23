@@ -26,7 +26,11 @@ component ControlSlider inherits HorizontalBox {
         icon-hit := TouchArea {
             mouse-cursor: pointer;
             clicked => {
-                if root.label == "Volume" { root.muted = !root.muted; Actions.run("media:mute"); }
+                if root.label == "Volume" {
+                    if Actions.run("media:mute") { root.muted = !root.muted; }
+                } else {
+                    Actions.run(root.uri);
+                }
             }
             pointer-event(event) => {
                 if event.kind == PointerEventKind.up && event.button == PointerEventButton.right { menu.show(); }
@@ -104,6 +108,10 @@ component QuickTile inherits VerticalBox {
     in property <string> uri;
     in-out property <bool> active: false;
     callback clicked();
+    function activate() {
+        if root.uri != "" { Actions.run(root.uri); }
+        else { root.active = !root.active; root.clicked(); }
+    }
 
     padding: 0px;
     spacing: 4px;
@@ -118,9 +126,9 @@ component QuickTile inherits VerticalBox {
             : (hit.has-hover ? OmniTheme.glass-card-hover : OmniTheme.glass-card);
         accessible-role: button;
         accessible-label: root.label;
-        accessible-checkable: true;
+        accessible-checkable: root.uri == "";
         accessible-checked: root.active;
-        accessible-action-default => { root.active = !root.active; root.clicked(); }
+        accessible-action-default => { root.activate(); }
 
         HorizontalBox {
             width: parent.width;
@@ -147,10 +155,7 @@ component QuickTile inherits VerticalBox {
             width: parent.width;
             height: parent.height;
             mouse-cursor: pointer;
-            clicked => {
-                root.active = !root.active;
-                root.clicked();
-            }
+            clicked => { root.activate(); }
             pointer-event(event) => {
                 if event.kind == PointerEventKind.up && event.button == PointerEventButton.right && root.uri != "" { menu.show(); }
             }
@@ -241,7 +246,7 @@ export component QuickSettings inherits ScrollView {
                             prominent: true;
                             glyph: root.media-playing ? "\u{e769}" : "\u{e768}";
                             label: root.media-playing ? "Pause" : "Play";
-                            activated => { root.media-playing = !root.media-playing; Actions.run("media:play"); }
+                            activated => { if Actions.run("media:play") { root.media-playing = !root.media-playing; } }
                         }
                         MediaButton { glyph: "\u{e893}"; label: "Next track"; activated => { root.media-next(); } }
                     }

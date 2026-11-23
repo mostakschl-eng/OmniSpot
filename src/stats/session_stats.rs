@@ -36,7 +36,7 @@ pub(crate) fn system_today() -> String {
 
 #[derive(Default)]
 struct SessionStatsData {
-    rollover_snapshot: Option<DailyBucketDocument>,
+    pending_rollovers: Vec<DailyBucketDocument>,
     current_snapshot: DailyBucketDocument,
     recent_process_names: Vec<String>,
     today_override: Option<String>,
@@ -46,7 +46,7 @@ impl SessionStatsData {
     fn new() -> Self {
         let today = system_today();
         Self {
-            rollover_snapshot: None,
+            pending_rollovers: Vec::new(),
             current_snapshot: DailyBucketDocument::new(&today),
             recent_process_names: Vec::new(),
             today_override: None,
@@ -63,11 +63,14 @@ impl SessionStatsData {
             return;
         }
 
-        if self.has_any_data() {
-            self.rollover_snapshot = Some(self.current_snapshot.clone());
+        let keep_previous = self.has_any_data();
+        let next = self.pending_rollovers.iter().position(|day| day.date == today)
+            .map(|index| self.pending_rollovers.remove(index))
+            .unwrap_or_else(|| DailyBucketDocument::new(&today));
+        let previous = std::mem::replace(&mut self.current_snapshot, next);
+        if keep_previous {
+            self.pending_rollovers.push(previous);
         }
-
-        self.current_snapshot = DailyBucketDocument::new(&today);
     }
 
     fn has_any_data(&self) -> bool {
@@ -145,29 +148,26 @@ impl SessionStats {
     pub(crate) fn load_from(&self, doc: &DailyBucketDocument) {
         let mut d = self.data.lock().unwrap();
         d.current_snapshot = doc.clone();
-        d.rollover_snapshot = None;
+        d.pending_rollovers.clear();
     }
 
     pub(crate) fn clear(&self) {
         let mut d = self.data.lock().unwrap();
         let today = d.today();
         d.current_snapshot = DailyBucketDocument::new(&today);
-        d.rollover_snapshot = None;
+        d.pending_rollovers.clear();
     }
 
     pub(crate) fn clear_rollover(&self) {
         let mut d = self.data.lock().unwrap();
-        d.rollover_snapshot = None;
+        d.pending_rollovers.clear();
     }
 
     pub(crate) fn get_snapshots(&self) -> Vec<DailyBucketDocument> {
         let mut d = self.data.lock().unwrap();
         d.check_rollover();
-        let today = d.current_snapshot.clone();
-        match &d.rollover_snapshot {
-            Some(prev) => vec![prev.clone(), today],
-            None => vec![today],
-        }
+        d.pending_rollovers.iter().chain(std::iter::once(&d.current_snapshot))
+            .cloned().collect()
     }
 
     pub(crate) fn simulate_last_recorded_date(&self, date: impl Into<String>) {
@@ -191,12 +191,8 @@ impl SessionStats {
         d.check_rollover();
         let mut usage: HashMap<String, i32> = HashMap::new();
 
-        let buckets = [d.rollover_snapshot.clone(), Some(d.current_snapshot.clone())];
-        for bucket in buckets.into_iter().flatten() {
-            for (key, stats) in bucket.static_app_usage {
-                *usage.entry(key.to_ascii_lowercase()).or_insert(0) += stats.switches;
-            }
-            for (key, stats) in bucket.dynamic_app_usage {
+        for bucket in d.pending_rollovers.iter().chain(std::iter::once(&d.current_snapshot)) {
+            for (key, stats) in bucket.static_app_usage.iter().chain(&bucket.dynamic_app_usage) {
                 *usage.entry(key.to_ascii_lowercase()).or_insert(0) += stats.switches;
             }
         }

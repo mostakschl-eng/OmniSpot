@@ -218,3 +218,21 @@ fn clear_removes_rollover_snapshot() {
     sut.clear();
     assert_eq!(sut.get_snapshots().len(), 1);
 }
+
+#[test]
+fn repeated_rollovers_keep_unflushed_days_and_resume_a_pending_day() {
+    let stats = SessionStats::new();
+    for date in ["2026-11-20", "2026-11-21", "2026-11-22", "2026-11-20"] {
+        stats.set_today_override(Some(date.into()));
+        stats.record_alt_tab(1);
+    }
+    let snapshots = stats.get_snapshots();
+    assert_eq!(snapshots.len(), 3);
+    assert_eq!(snapshots.last().unwrap().date, "2026-11-20");
+    assert_eq!(snapshots.last().unwrap().alt_tab_switches, 2);
+    assert!(snapshots.iter().any(|day| day.date == "2026-11-21"));
+    assert!(snapshots.iter().any(|day| day.date == "2026-11-22"));
+
+    stats.clear_rollover();
+    assert_eq!(stats.get_snapshots().len(), 1);
+}

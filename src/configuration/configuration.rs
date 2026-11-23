@@ -26,6 +26,14 @@ pub struct Configuration {
     pub spotlight_enabled: bool,
     pub spotlight_modifier: u32,
     pub spotlight_custom_directories: Option<Vec<String>>,
+    #[serde(default)]
+    pub hide_windows_taskbar: bool,
+    #[serde(default = "default_taskbar_modifier")]
+    pub taskbar_modifier: u32,
+}
+
+pub(crate) fn default_taskbar_modifier() -> u32 {
+    crate::input::keyboard_input::LEFT_ALT
 }
 
 impl Default for Configuration {
@@ -44,6 +52,8 @@ impl Default for Configuration {
             spotlight_enabled: true,
             spotlight_modifier: crate::input::keyboard_input::LEFT_ALT,
             spotlight_custom_directories: None,
+            hide_windows_taskbar: false,
+            taskbar_modifier: default_taskbar_modifier(),
         }
     }
 }

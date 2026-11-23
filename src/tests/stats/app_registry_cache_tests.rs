@@ -77,6 +77,8 @@ fn empty_config() -> Configuration {
         spotlight_enabled: false,
         spotlight_modifier: 0,
         spotlight_custom_directories: None,
+        hide_windows_taskbar: false,
+        taskbar_modifier: crate::input::keyboard_input::LEFT_ALT,
     }
 }
 

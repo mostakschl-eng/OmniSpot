@@ -1,0 +1,152 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { OmniTheme, PopupCard } from "../theme.slint";
+import { PanelButton, RailIconButton, ThemeSwitchPill } from "controls.slint";
+import { CalendarMonth, TaskbarCalendar } from "calendar.slint";
+
+component HeaderDragArea inherits TouchArea {
+    in property <bool> can-drag;
+    private property <bool> armed;
+    callback drag-window();
+
+    pointer-event(event) => {
+        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+            root.armed = root.can-drag;
+        }
+        if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+            root.armed = false;
+        }
+    }
+    moved => {
+        if root.armed && root.pressed && root.can-drag
+            && (abs(root.mouse-x - root.pressed-x) >= 4px || abs(root.mouse-y - root.pressed-y) >= 4px)
+        {
+            root.armed = false;
+            root.drag-window();
+        }
+    }
+}
+
+export component TaskbarHeader inherits HorizontalBox {
+    in property <int> page;
+    in property <int> notification-count;
+    in property <string> time;
+    in property <string> short-date;
+    in property <CalendarMonth> calendar-month;
+    in-out property <bool> quick-open;
+    in-out property <bool> fullscreen;
+    out property <string> hovered-label:
+        notifications.hovered ? "Notifications" : clock-hit.has-hover ? "Date and time" : "";
+    callback navigate(int);
+    callback action(string);
+    callback drag-window();
+    callback dismiss();
+
+    height: 60px;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    spacing: 4px;
+
+    Rectangle {
+        width: 128px;
+        HeaderDragArea {
+            can-drag: !root.fullscreen;
+            drag-window => { root.drag-window(); }
+        }
+        HorizontalBox {
+            padding: 0px;
+            spacing: 8px;
+            alignment: start;
+            Image {
+                width: 28px;
+                height: 28px;
+                source: @image-url("../../assets/app-switcher.png");
+                image-fit: contain;
+            }
+            Text {
+                text: "OmniSpot";
+                color: OmniTheme.text-primary;
+                font-size: 18px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+    }
+    Rectangle {
+        horizontal-stretch: 1;
+        HeaderDragArea {
+            can-drag: !root.fullscreen;
+            drag-window => { root.drag-window(); }
+        }
+    }
+
+    notifications := RailIconButton {
+        glyph: "\u{ea8f}"; label: "Notifications"; selected: root.page == 4;
+        badge-count: root.notification-count;
+        activated => { root.navigate(4); }
+    }
+    Rectangle {
+        width: 104px;
+        height: 42px;
+        border-radius: OmniTheme.radius-m;
+        background: clock-hit.pressed ? OmniTheme.press-bg
+            : clock-hit.has-hover ? OmniTheme.glass-pill-hover-bg : transparent;
+        accessible-role: button;
+        accessible-label: "Date and time";
+        accessible-action-default => { calendar.show(); }
+        VerticalBox {
+            padding: 0px; spacing: 1px; alignment: center;
+            Text { text: root.time; color: OmniTheme.text-primary; font-size: 12px; horizontal-alignment: center; }
+            Text { text: root.short-date; color: OmniTheme.text-secondary; font-size: 11px; horizontal-alignment: center; }
+        }
+        clock-hit := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { calendar.show(); }
+        }
+        calendar := PopupWindow {
+            x: parent.width - 252px; y: parent.height + 8px;
+            TaskbarCalendar { month: root.calendar-month; }
+        }
+    }
+    PanelButton {
+        width: 36px; label: "Quick settings"; caption: ""; glyph: "\u{e9e9}";
+        selected: root.quick-open;
+        activated => { root.quick-open = !root.quick-open; }
+    }
+    ThemeSwitchPill {
+        dark: OmniTheme.dark;
+        toggle-theme => { OmniTheme.requested-theme = OmniTheme.dark ? 2 : 1; }
+    }
+    PanelButton {
+        width: 36px; label: "Show desktop"; caption: ""; glyph: "\u{e8fc}";
+        activated => { root.action("Show desktop"); }
+    }
+    PanelButton {
+        width: 36px; label: "Power"; caption: ""; glyph: "\u{e7e8}";
+        activated => { power.show(); }
+        power := PopupWindow {
+            x: parent.width - 158px; y: parent.height + 8px;
+            PopupCard {
+                width: 158px; height: 176px;
+                VerticalBox {
+                    padding: 6px; spacing: 2px;
+                    for action[index] in ["Lock", "Sleep", "Restart", "Shut down", "Sign out"] : PanelButton {
+                        height: 31px; label: action;
+                        glyph: ["\u{e72e}", "\u{e708}", "\u{e777}", "\u{e7e8}", "\u{e8ac}"][index];
+                        activated => { power.close(); root.action(action); }
+                    }
+                }
+            }
+        }
+    }
+    PanelButton {
+        width: 36px; label: root.fullscreen ? "Exit full screen" : "Full screen"; caption: "";
+        glyph: root.fullscreen ? "\u{e73f}" : "\u{e740}";
+        activated => { root.fullscreen = !root.fullscreen; }
+    }
+    PanelButton {
+        width: 36px; label: "Close"; caption: ""; glyph: "\u{e711}";
+        activated => { root.dismiss(); }
+    }
+}

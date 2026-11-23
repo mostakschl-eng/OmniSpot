@@ -406,6 +406,8 @@ fn apply_draft(config: &Configuration, draft: &SettingsDraft) -> Configuration {
         spotlight_enabled: draft.spotlight,
         spotlight_modifier: modifier(draft.spotlight_modifier, config.spotlight_modifier),
         spotlight_custom_directories: (!folders.is_empty()).then_some(folders),
+        hide_windows_taskbar: draft.hide_windows_taskbar,
+        taskbar_modifier: modifier(draft.taskbar_modifier, config.taskbar_modifier),
         stats_enabled: draft.stats,
         applications: draft
             .applications
@@ -453,6 +455,8 @@ fn refresh(window: &SettingsWindow, config: &Configuration) {
         spotlight: config.spotlight_enabled,
         spotlight_modifier: modifier_index(config.spotlight_modifier),
         spotlight_folders: ModelRc::new(VecModel::from(folders)),
+        hide_windows_taskbar: config.hide_windows_taskbar,
+        taskbar_modifier: modifier_index(config.taskbar_modifier),
         stats: config.stats_enabled,
         applications: ModelRc::new(VecModel::from(
             config

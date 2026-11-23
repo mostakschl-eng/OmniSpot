@@ -1,4 +1,7 @@
 use std::io::Read;
+
+pub(crate) mod dock;
+pub(crate) mod clock;
 use std::os::windows::io::{FromRawHandle, OwnedHandle};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -19,27 +22,58 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 pub const TASKBAR_TEST_SECONDS: u64 = 20;
 
+pub fn send_media_key(action: &str) -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::*;
+    let key = match action {
+        "media:prev" => VK_MEDIA_PREV_TRACK,
+        "media:next" => VK_MEDIA_NEXT_TRACK,
+        "media:play" => VK_MEDIA_PLAY_PAUSE,
+        "media:mute" => VK_VOLUME_MUTE,
+        _ => return false,
+    };
+    let inputs = [KEYBD_EVENT_FLAGS(0), KEYEVENTF_KEYUP].map(|flags| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: key, dwFlags: flags, ..Default::default() } },
+    });
+    unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) == inputs.len() as u32 }
+}
+
 pub fn test_hide_windows_taskbar() -> Result<(), String> {
+    run_taskbar_visibility_worker(false)
+}
+
+pub fn run_taskbar_visibility_worker(persistent: bool) -> Result<(), String> {
     let _lease = unsafe {
         let handle = CreateMutexW(None, false, w!("Local\\OmniSpotTaskbarPreview"))
             .map_err(|error| error.to_string())?;
         let already_open = GetLastError() == ERROR_ALREADY_EXISTS;
         let lease = OwnedHandle::from_raw_handle(handle.0);
         if already_open {
-            return Err("A taskbar test is already running.".into());
+            return Err("OmniSpot is already managing Windows taskbar visibility.".into());
         }
         lease
     };
 
+    let (stop, stopped) = mpsc::channel();
+    // The parent owns the writing end, so stopping or losing the parent sends EOF.
+    std::thread::Builder::new()
+        .spawn(move || {
+            let _ = std::io::stdin().read(&mut [0]);
+            let _ = stop.send(());
+        })
+        .map_err(|error| error.to_string())?;
+
     let mut hidden = HiddenTaskbars::default();
     hidden.hide()?;
-    let (stop, stopped) = mpsc::channel();
-    // The parent owns the writing end. Closing the preview or losing its process sends EOF.
-    std::thread::spawn(move || {
-        let _ = std::io::stdin().read(&mut [0]);
-        let _ = stop.send(());
-    });
-    let _ = stopped.recv_timeout(Duration::from_secs(TASKBAR_TEST_SECONDS));
+    if persistent {
+        while let Err(mpsc::RecvTimeoutError::Timeout) =
+            stopped.recv_timeout(Duration::from_millis(500))
+        {
+            hidden.hide_visible_windows()?;
+        }
+    } else {
+        let _ = stopped.recv_timeout(Duration::from_secs(TASKBAR_TEST_SECONDS));
+    }
     hidden.restore()
 }
 
@@ -52,22 +86,6 @@ struct HiddenTaskbars {
 impl HiddenTaskbars {
     fn hide(&mut self) -> Result<(), String> {
         let primary = primary_taskbar()?;
-        // shortcut: Explorer's window class names are undocumented, replace this if Windows exposes a supported API.
-        for class in [w!("Shell_TrayWnd"), w!("Shell_SecondaryTrayWnd")] {
-            let mut previous = HWND::default();
-            while let Ok(window) =
-                unsafe { FindWindowExW(HWND::default(), previous, class, PCWSTR::null()) }
-            {
-                previous = window;
-                let owner = owner_process(window);
-                if owner != 0 && unsafe { IsWindowVisible(window).as_bool() } {
-                    self.windows.push((window, owner));
-                }
-            }
-        }
-        if self.windows.is_empty() {
-            return Err("No visible Windows taskbar was found.".into());
-        }
         let previous_state = appbar_state();
         let auto_hide = ABS_AUTOHIDE as usize;
         if previous_state & auto_hide == 0 {
@@ -96,8 +114,31 @@ impl HiddenTaskbars {
                 std::thread::sleep(Duration::from_millis(25));
             }
         }
-        for &(window, _) in &self.windows {
-            set_visible(window, false)?;
+        self.hide_visible_windows()
+    }
+
+    fn hide_visible_windows(&mut self) -> Result<(), String> {
+        self.windows
+            .retain(|&(window, owner)| owner_process(window) == owner);
+        // shortcut: Explorer's window class names are undocumented, replace this if Windows exposes a supported API.
+        for class in [w!("Shell_TrayWnd"), w!("Shell_SecondaryTrayWnd")] {
+            let mut previous = HWND::default();
+            while let Ok(window) =
+                unsafe { FindWindowExW(HWND::default(), previous, class, PCWSTR::null()) }
+            {
+                previous = window;
+                let owner = owner_process(window);
+                if owner != 0 && unsafe { IsWindowVisible(window).as_bool() } {
+                    if !self.windows.contains(&(window, owner)) {
+                        self.windows.push((window, owner));
+                    }
+                    if let Err(error) = set_visible(window, false) {
+                        if owner_process(window) == owner {
+                            return Err(error);
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }

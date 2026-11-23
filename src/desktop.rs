@@ -5,9 +5,14 @@ pub use crate::configuration::app_theme_setting::AppThemeSetting;
 pub use crate::configuration::application_type::ApplicationType;
 pub use crate::configuration::configuration::{ApplicationConfiguration, Configuration, CycleMode};
 pub use crate::desktop_hook::{CaptureEvent, DesktopCapture, DesktopInstance};
-pub use crate::desktop_icons::{shell_icon, ICON_SIZE};
+pub use crate::desktop_icons::{dock_icon, indexed_icon, shell_icon, DOCK_ICON_SIZE, ICON_SIZE};
 pub use crate::spotlight::model::IndexedResult;
-pub use crate::taskbar::{test_hide_windows_taskbar, TASKBAR_TEST_SECONDS};
+pub use crate::taskbar::{
+    run_taskbar_visibility_worker, send_media_key, test_hide_windows_taskbar,
+    TASKBAR_TEST_SECONDS,
+};
+pub use crate::taskbar::dock::{activate_window as activate_dock_window, snapshot as taskbar_dock, DockApp, DockWindow};
+pub use crate::taskbar::clock::taskbar_clock;
 
 pub fn load_settings(path: &Path) -> Result<Configuration, String> {
     let settings = crate::storage::load_desktop_settings(path.to_owned())
@@ -279,17 +284,22 @@ pub fn set_passive_window(handle: isize) {
 }
 
 pub fn drag_window(handle: isize) {
-    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
-    use windows::Win32::UI::WindowsAndMessaging::{SendMessageW, HTCAPTION, WM_NCLBUTTONDOWN};
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, PostMessageW, HTCAPTION, WM_NCLBUTTONDOWN};
     unsafe {
+        let mut cursor = POINT::default();
+        if GetCursorPos(&mut cursor).is_err() {
+            return;
+        }
+        let position = u32::from(cursor.x as u16) | (u32::from(cursor.y as u16) << 16);
         let _ = ReleaseCapture();
         let hwnd = HWND(handle as *mut _);
-        let _ = SendMessageW(
+        let _ = PostMessageW(
             hwnd,
             WM_NCLBUTTONDOWN,
             WPARAM(HTCAPTION as usize),
-            LPARAM(0),
+            LPARAM(position as isize),
         );
     }
 }
@@ -368,6 +378,18 @@ pub fn focus_window(handle: isize) {
     };
 }
 
+pub fn raise_taskbar_window(handle: isize) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE,
+    };
+
+    let _ = unsafe {
+        SetWindowPos(HWND(handle as *mut _), HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
+    };
+    focus_window(handle);
+}
+
 pub fn foreground_window_handle() -> isize {
     unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }.0 as isize
 }
@@ -396,38 +418,50 @@ pub fn spotlight_index_path(profile: &Path, config: &Configuration) -> std::path
 pub struct SpotlightSearch {
     index: crate::spotlight::index::SearchIndex,
     path: std::path::PathBuf,
+    last_scan: Option<std::time::Instant>,
 }
 
 impl SpotlightSearch {
     pub fn load(configuration: &Configuration, path: std::path::PathBuf) -> Self {
         use crate::spotlight::index::SearchIndex;
-        let mut index = SearchIndex::load(&path);
+        let index = SearchIndex::load(&path);
         if index.entries.is_empty() {
-            let mut roots = Vec::new();
-            if let Some(home) = std::env::var_os("USERPROFILE") {
-                roots.push(home.into());
-            }
-            for name in ["APPDATA", "PROGRAMDATA"] {
-                if let Some(base) = std::env::var_os(name) {
-                    roots.push(
-                        Path::new(&base)
-                            .join("Microsoft")
-                            .join("Windows")
-                            .join("Start Menu"),
-                    );
-                }
-            }
-            roots.extend(
-                configuration
-                    .spotlight_custom_directories
-                    .iter()
-                    .flatten()
-                    .map(std::path::PathBuf::from),
-            );
-            index = SearchIndex::scan_all(&roots, &[], &path);
-            index.save(&path);
+            let mut scanned = Self::scan(configuration, path);
+            scanned.index.save(&scanned.path);
+            return scanned;
         }
-        Self { index, path }
+        Self {
+            index,
+            path,
+            last_scan: None,
+        }
+    }
+
+    pub fn scan(configuration: &Configuration, path: std::path::PathBuf) -> Self {
+        let mut roots = Vec::new();
+        if let Some(home) = std::env::var_os("USERPROFILE") {
+            roots.push(home.into());
+        }
+        for name in ["APPDATA", "PROGRAMDATA"] {
+            if let Some(base) = std::env::var_os(name) {
+                roots.push(Path::new(&base).join("Microsoft").join("Windows").join("Start Menu"));
+            }
+        }
+        roots.extend(
+            configuration.spotlight_custom_directories.iter().flatten()
+                .map(std::path::PathBuf::from),
+        );
+        let index = crate::spotlight::index::SearchIndex::scan_all(&roots, &[], &path);
+        Self { index, path, last_scan: Some(std::time::Instant::now()) }
+    }
+
+    pub fn needs_refresh(&self) -> bool {
+        self.last_scan.is_none_or(|scan| scan.elapsed() >= std::time::Duration::from_secs(120))
+    }
+
+    pub fn apply_refresh(&mut self, mut scanned: Self) {
+        self.index.swap_entries(&mut scanned.index);
+        self.last_scan = scanned.last_scan;
     }
 
     pub fn search(&self, query: &str) -> Vec<IndexedResult> {
@@ -868,6 +902,42 @@ mod tests {
     }
 
     #[test]
+    fn spotlight_cached_results_are_replaced_by_a_fresh_scan() {
+        use crate::spotlight::index::SearchIndex;
+
+        let folder = std::env::temp_dir()
+            .join(format!("omnispot-spotlight-refresh-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let original = folder.join("OmniAuditRetiredDocument.txt");
+        let added = folder.join("OmniAuditReplacementDocument.txt");
+        let cache = folder.join("spotlight-index.json");
+        std::fs::write(&original, b"old").unwrap();
+        SearchIndex::scan_all(std::slice::from_ref(&folder), &[], &cache).save(&cache);
+
+        let mut spotlight = super::SpotlightSearch::load(&super::Configuration::default(), cache.clone());
+        assert!(spotlight.needs_refresh());
+        assert!(spotlight.search("omniauditretireddocument").iter()
+            .any(|result| result.target.ends_with("OmniAuditRetiredDocument.txt")));
+
+        std::fs::remove_file(&original).unwrap();
+        std::fs::write(&added, b"new").unwrap();
+        spotlight.apply_refresh(super::SpotlightSearch {
+            index: SearchIndex::scan_all(std::slice::from_ref(&folder), &[], &cache),
+            path: cache.clone(),
+            last_scan: Some(std::time::Instant::now()),
+        });
+
+        assert!(!spotlight.needs_refresh());
+        assert!(spotlight.search("omniauditreplacementdocument").iter()
+            .any(|result| result.target.ends_with("OmniAuditReplacementDocument.txt")));
+        assert!(!spotlight.search("omniauditretireddocument").iter()
+            .any(|result| result.target.ends_with("OmniAuditRetiredDocument.txt")));
+        std::fs::remove_file(added).unwrap();
+        std::fs::remove_file(cache).unwrap();
+        std::fs::remove_dir(folder).unwrap();
+    }
+
+    #[test]
     fn desktop_settings_round_trip_and_legacy_profiles_are_preserved() {
         let directory =
             std::env::temp_dir().join(format!("omnispot-desktop-settings-{}", std::process::id()));
@@ -881,11 +951,29 @@ mod tests {
         std::fs::remove_file(legacy).unwrap();
 
         let mut config = super::load_settings(&path).unwrap();
+        assert!(!config.hide_windows_taskbar);
+        assert_eq!(config.taskbar_modifier, crate::input::keyboard_input::LEFT_ALT);
         config.overlay_enabled = true;
         config.overlay_show_delay_ms = 450;
         config.theme = super::AppThemeSetting::Dark;
+        config.hide_windows_taskbar = true;
+        config.taskbar_modifier = crate::input::keyboard_input::RIGHT_CTRL;
         super::save_settings(&path, config.clone()).unwrap();
         assert_eq!(super::load_settings(&path).unwrap(), config);
+
+        let database = rusqlite::Connection::open(&path).unwrap();
+        database
+            .execute(
+                "UPDATE documents SET value = json_remove(value, '$.hideWindowsTaskbar', '$.taskbarModifier')
+                 WHERE collection = 'settings'",
+                [],
+            )
+            .unwrap();
+        drop(database);
+        config.hide_windows_taskbar = false;
+        config.taskbar_modifier = crate::input::keyboard_input::LEFT_ALT;
+        assert_eq!(super::load_settings(&path).unwrap(), config);
+
         std::fs::remove_file(path).unwrap();
         std::fs::remove_dir(directory).unwrap();
     }

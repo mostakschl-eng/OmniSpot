@@ -22,6 +22,7 @@ use windows::Win32::Foundation::{
 };
 use windows::Win32::Globalization::GetUserDefaultLocaleName;
 use windows::Win32::System::{LibraryLoader::GetModuleHandleW, Threading::CreateMutexW};
+use windows::Win32::UI::Input::KeyboardAndMouse::VK_O;
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL,
     WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
@@ -34,6 +35,8 @@ pub enum CaptureEvent {
     HideOverlay,
     Warn { restricted: bool },
     ToggleSpotlight,
+    ToggleTaskbar,
+    OpenSettings,
     PotentialElevation,
     Error(String),
 }
@@ -49,6 +52,7 @@ struct NativeHost {
     events: Sender<CaptureEvent>,
     overlay_delay: Duration,
     overlay_visible: bool,
+    settings_shortcut_enabled: bool,
 }
 
 impl NativeHost {
@@ -88,6 +92,9 @@ impl HookHost for NativeHost {
     }
     fn toggle_spotlight(&mut self) {
         self.emit(CaptureEvent::ToggleSpotlight);
+    }
+    fn toggle_taskbar(&mut self) {
+        self.emit(CaptureEvent::ToggleTaskbar);
     }
     fn enqueue_stats(&mut self, event: StatsEvent) {
         crate::ffi::enqueue_desktop_stats(event);
@@ -168,7 +175,11 @@ impl DesktopCapture {
     }
 
     pub fn update(config: Configuration) {
-        with_engine(|engine, _| engine.update_configuration(config));
+        with_engine(|engine, _| {
+            engine.host.settings_shortcut_enabled = config.hide_windows_taskbar;
+            engine.set_taskbar_modifier(config.taskbar_modifier);
+            engine.update_configuration(config);
+        });
     }
 
     pub fn preview_overlay(enabled: bool) {
@@ -205,8 +216,10 @@ fn create_engine(config: Configuration) -> Result<(Engine, Receiver<CaptureEvent
             events,
             overlay_delay: Duration::ZERO,
             overlay_visible: false,
+            settings_shortcut_enabled: config.hide_windows_taskbar,
         },
     );
+    engine.set_taskbar_modifier(config.taskbar_modifier);
     engine.start(config).map_err(|error| error.message)?;
     Ok((engine, receiver))
 }
@@ -249,14 +262,71 @@ unsafe extern "system" fn keyboard_callback(code: i32, wparam: WPARAM, lparam: L
 }
 
 fn dispatch_keyboard(message: u32, vk: u32, flags: u32) -> bool {
+    let is_key_down = matches!(message, WM_KEYDOWN | WM_SYSKEYDOWN);
     let mut event = KeyboardHookEvent {
         key: keyboard_input::key_from_virtual_key(vk),
-        is_key_down: matches!(message, WM_KEYDOWN | WM_SYSKEYDOWN),
+        is_key_down,
         flags,
         suppress_key_press: false,
     };
-    with_engine(|engine, culture| engine.keyboard_pressed(&mut event, culture));
+    with_engine(|engine, culture| {
+        if engine.host.settings_shortcut_enabled
+            && vk == u32::from(VK_O.0)
+            && [
+                keyboard_input::LEFT_CTRL,
+                keyboard_input::LEFT_ALT,
+                keyboard_input::LEFT_SHIFT,
+            ]
+            .into_iter()
+            .all(keyboard_input::is_key_physically_down)
+        {
+            if is_key_down {
+                engine.host.emit(CaptureEvent::OpenSettings);
+            }
+            event.suppress_key_press = true;
+            return;
+        }
+        engine.keyboard_pressed(&mut event, culture);
+    });
     event.suppress_key_press
+}
+
+#[cfg(test)]
+#[test]
+fn taskbar_shortcut_accepts_the_windows_alt_flag_without_a_prior_keydown() {
+    use windows::Win32::UI::Input::KeyboardAndMouse::VK_F2;
+
+    let (engine, events) = create_engine(Configuration::default()).unwrap();
+    ENGINE.with(|slot| *slot.borrow_mut() = Some((engine, "en-US".into())));
+    let f2 = u32::from(VK_F2.0);
+    assert!(dispatch_keyboard(WM_SYSKEYDOWN, f2, 0x20));
+    assert!(dispatch_keyboard(WM_SYSKEYUP, f2, 0));
+    assert!(events.try_iter().any(|event| matches!(event, CaptureEvent::ToggleTaskbar)));
+    ENGINE.with(|slot| {
+        slot.borrow_mut().take();
+    });
+}
+
+#[cfg(test)]
+#[test]
+fn taskbar_shortcut_toggles_once_per_press() {
+    let (engine, events) = create_engine(Configuration::default()).unwrap();
+    ENGINE.with(|slot| *slot.borrow_mut() = Some((engine, "en-US".into())));
+    let alt = u32::from(keyboard_input::virtual_key_from_key(keyboard_input::LEFT_ALT));
+    let f2 = u32::from(keyboard_input::virtual_key_from_key(keyboard_input::F2));
+    assert!(!dispatch_keyboard(WM_KEYDOWN, f2, 0));
+    assert!(!dispatch_keyboard(WM_KEYDOWN, alt, 0));
+    assert!(dispatch_keyboard(WM_KEYDOWN, f2, 0));
+    assert!(dispatch_keyboard(WM_KEYDOWN, f2, 0));
+    assert!(!dispatch_keyboard(WM_KEYUP, alt, 0));
+    assert!(dispatch_keyboard(WM_KEYUP, f2, 0));
+    assert_eq!(
+        events.try_iter().filter(|event| matches!(event, CaptureEvent::ToggleTaskbar)).count(),
+        1,
+    );
+    ENGINE.with(|slot| {
+        slot.borrow_mut().take();
+    });
 }
 
 #[cfg(test)]

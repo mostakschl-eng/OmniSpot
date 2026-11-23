@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use super::super::app_theme_setting::AppThemeSetting;
-use super::super::configuration::Configuration;
+use super::super::configuration::{default_taskbar_modifier, Configuration};
 use super::application_configuration_document::ApplicationConfigurationDocument;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +32,10 @@ pub(crate) struct SettingsDocument {
     pub spotlight_modifier: u32,
     #[serde(default)]
     pub spotlight_custom_directories: Option<Vec<String>>,
+    #[serde(default)]
+    pub hide_windows_taskbar: bool,
+    #[serde(default = "default_taskbar_modifier")]
+    pub taskbar_modifier: u32,
 }
 
 fn default_true() -> bool {
@@ -66,6 +70,8 @@ impl SettingsDocument {
             spotlight_enabled: self.spotlight_enabled,
             spotlight_modifier: self.spotlight_modifier,
             spotlight_custom_directories: self.spotlight_custom_directories.clone(),
+            hide_windows_taskbar: self.hide_windows_taskbar,
+            taskbar_modifier: self.taskbar_modifier,
         }
     }
 
@@ -92,6 +98,8 @@ impl SettingsDocument {
                 Some(dirs) if !dirs.is_empty() => Some(dirs.clone()),
                 _ => None,
             },
+            hide_windows_taskbar: config.hide_windows_taskbar,
+            taskbar_modifier: config.taskbar_modifier,
         }
     }
 }

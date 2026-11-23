@@ -1,0 +1,37 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+import { Heading, SettingRow, SettingSwitch } from "../controls/setting-row.slint";
+import { ModifierKeyboard } from "../controls/modifier-keyboard.slint";
+
+export component TaskbarPage inherits VerticalBox {
+    in-out property <bool> hide-windows-taskbar;
+    in-out property <int> taskbar-modifier;
+    in property <bool> taskbar-available;
+    callback edit();
+    callback open-taskbar();
+
+    padding-left: 0px; padding-right: 12px; padding-top: 14px; padding-bottom: 20px;
+    spacing: 8px; alignment: start;
+
+    SettingRow {
+        glyph: "\u{e7c4}";
+        label: "OmniSpot Taskbar";
+        description: "Use the Close button on the Taskbar when you're done.";
+        Button {
+            text: "Open Taskbar";
+            enabled: root.taskbar-available;
+            clicked => { root.open-taskbar(); }
+        }
+    }
+    Heading { text: "Activation Shortcut (Modifier + F2)"; }
+    ModifierKeyboard {
+        current-index: root.taskbar-modifier;
+        selected(index) => { root.taskbar-modifier = index; root.edit(); }
+    }
+    SettingSwitch {
+        glyph: "\u{e7c4}";
+        label: "Hide Windows taskbar completely";
+        description: "Hides the Windows taskbar while OmniSpot runs. Press Ctrl+Alt+Shift+O to reopen Settings.";
+        checked: root.hide-windows-taskbar;
+        edited(value) => { root.hide-windows-taskbar = value; root.edit(); }
+    }
+}

@@ -7,6 +7,8 @@ mod floating;
 mod host;
 mod icons;
 mod settings;
+mod taskbar_actions;
+mod taskbar_dock;
 mod taskbar_preview;
 
 slint::include_modules!();
@@ -82,7 +84,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .is_some_and(|arg| arg == taskbar_preview::TEST_WORKER_ARG)
     {
-        if let Err(error) = desktop::test_hide_windows_taskbar() {
+        let persistent = std::env::args_os()
+            .nth(2)
+            .is_some_and(|arg| arg == "--persistent");
+        if let Err(error) = desktop::run_taskbar_visibility_worker(persistent) {
             eprintln!("{error}");
             std::process::exit(1);
         }

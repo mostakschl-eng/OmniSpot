@@ -77,6 +77,13 @@ impl ConfigurationValidator {
             ));
         }
 
+        if !VALID_MODIFIERS.contains(&configuration.taskbar_modifier) {
+            return ValidationResult::error(format!(
+                "Invalid taskbar modifier key ({}) - must be one of: {:?}",
+                configuration.taskbar_modifier, VALID_MODIFIERS
+            ));
+        }
+
         for app in &configuration.applications {
             let result = Self::validate_application(app);
             if result.is_error() {

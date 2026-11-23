@@ -6,6 +6,7 @@ import { GeneralPage } from "../pages/general-page.slint";
 import { ApplicationsPage, HotkeyDraft, PickerApp } from "../pages/applications-page.slint";
 import { OverlayPage } from "../pages/overlay-page.slint";
 import { SpotlightPage } from "../pages/spotlight-page.slint";
+import { TaskbarPage } from "../pages/taskbar-page.slint";
 import { StatsPage, StatCard, StatDay } from "../pages/stats-page.slint";
 import { AboutPage } from "../pages/about-page.slint";
 
@@ -37,6 +38,8 @@ export struct SettingsDraft {
     spotlight: bool,
     spotlight-modifier: int,
     spotlight-folders: [string],
+    hide-windows-taskbar: bool,
+    taskbar-modifier: int,
     applications: [HotkeyDraft],
     stats: bool,
 }
@@ -49,6 +52,7 @@ export component SettingsWindow inherits Window {
     in property <bool> startup-enabled;
     in property <bool> startup-interactive: true;
     in property <bool> pulse-supported: true;
+    in property <bool> taskbar-available;
     in property <[PickerApp]> running-apps;
     in property <[HotkeyDraft]> dynamic-bindings;
     in property <string> stats-summary;
@@ -61,6 +65,7 @@ export component SettingsWindow inherits Window {
     callback reset();
     callback discard();
     callback preview-overlay(bool);
+    callback open-taskbar();
     callback open-website();
     callback open-log-folder();
     callback copy-diagnostics();
@@ -111,6 +116,7 @@ export component SettingsWindow inherits Window {
                 NavigationItem { label: "Applications"; glyph: "\u{e71d}"; selected: root.page == 3; activated => { root.page = 3; root.refresh-bindings(); } }
                 NavigationItem { label: "Overlay"; glyph: "\u{e7c4}"; selected: root.page == 1; activated => { root.page = 1; } }
                 NavigationItem { label: "Spotlight Search"; glyph: "\u{e721}"; selected: root.page == 2; activated => { root.page = 2; } }
+                NavigationItem { label: "Taskbar"; glyph: "\u{e7c4}"; selected: root.page == 6; activated => { root.page = 6; } }
                 NavigationItem { label: "Stats"; glyph: "\u{e9d9}"; selected: root.page == 4; activated => { root.page = 4; root.refresh-stats(); } }
                 Rectangle { vertical-stretch: 1; }
                 Rectangle { height: 1px; background: OmniTheme.divider; }
@@ -163,6 +169,13 @@ export component SettingsWindow inherits Window {
                         spotlight-folders: root.draft.spotlight-folders;
                         add-folder => { root.add-folder(); }
                         remove-folder(idx) => { root.remove-folder(idx); }
+                        edit => { root.edit(); }
+                    }
+                    if root.page == 6 : TaskbarPage {
+                        hide-windows-taskbar <=> root.draft.hide-windows-taskbar;
+                        taskbar-modifier <=> root.draft.taskbar-modifier;
+                        taskbar-available: root.taskbar-available;
+                        open-taskbar => { root.open-taskbar(); }
                         edit => { root.edit(); }
                     }
                     if root.page == 4 : StatsPage {

@@ -130,39 +130,22 @@ impl SearchIndex {
             } else if root_str.contains("program files") {
                 scan_app_directory(root, 0, 2, &mut entries, &mut seen);
             } else if is_user_profile_root(root) {
-                let docs = root.join("Documents");
-                if docs.is_dir() {
-                    scan_file_directory(&docs, 0, 5, &mut entries, &mut seen, MAX_INDEXED_FILES);
-                }
-                let downloads = root.join("Downloads");
-                if downloads.is_dir() {
+                for (folder, depth) in [
+                    ("Documents", 5),
+                    ("Downloads", 4),
+                    ("Desktop", 5),
+                    ("Videos", 5),
+                    ("Pictures", 4),
+                    ("Music", 4),
+                ] {
                     scan_file_directory(
-                        &downloads,
+                        &root.join(folder),
                         0,
-                        4,
+                        depth,
                         &mut entries,
                         &mut seen,
                         MAX_INDEXED_FILES,
                     );
-                }
-                let videos = root.join("Videos");
-                if videos.is_dir() {
-                    scan_file_directory(&videos, 0, 5, &mut entries, &mut seen, MAX_INDEXED_FILES);
-                }
-                let pictures = root.join("Pictures");
-                if pictures.is_dir() {
-                    scan_file_directory(
-                        &pictures,
-                        0,
-                        4,
-                        &mut entries,
-                        &mut seen,
-                        MAX_INDEXED_FILES,
-                    );
-                }
-                let music = root.join("Music");
-                if music.is_dir() {
-                    scan_file_directory(&music, 0, 4, &mut entries, &mut seen, MAX_INDEXED_FILES);
                 }
             } else {
                 scan_app_directory(root, 0, 3, &mut entries, &mut seen);

@@ -1,0 +1,46 @@
+import { VerticalBox } from "std-widgets.slint";
+import { RailIconButton } from "controls.slint";
+import { RailLogoButton } from "win-menu.slint";
+
+export component TaskbarSidebar inherits VerticalBox {
+    in property <int> page;
+    out property <string> hovered-label:
+        windows.hovered ? "Windows" : home.hovered ? "Home" : search.hovered ? "Search"
+        : tasks.hovered ? "Task view" : apps.hovered ? "Apps" : settings.hovered ? "Settings" : "";
+    callback navigate(int);
+    callback action(string);
+
+    width: 62px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    spacing: 6px;
+
+    windows := RailLogoButton {
+        selected: root.page == 6;
+        activated => { root.navigate(6); }
+        chosen(target) => { root.action(target); }
+    }
+    home := RailIconButton {
+        glyph: "\u{e80f}"; label: "Home"; selected: root.page == 0;
+        activated => { root.navigate(0); }
+    }
+    search := RailIconButton {
+        glyph: "\u{e721}"; label: "Search"; selected: root.page == 1;
+        activated => { root.navigate(1); }
+    }
+    tasks := RailIconButton {
+        glyph: "\u{e7c4}"; label: "Task view"; selected: root.page == 2;
+        activated => { root.navigate(2); }
+    }
+    apps := RailIconButton {
+        glyph: "\u{e71d}"; label: "Apps"; selected: root.page == 3;
+        activated => { root.navigate(3); }
+    }
+    Rectangle { vertical-stretch: 1; }
+    settings := RailIconButton {
+        glyph: "\u{e713}"; label: "Settings"; selected: root.page == 5;
+        activated => { root.navigate(5); }
+    }
+}

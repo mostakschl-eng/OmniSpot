@@ -45,6 +45,8 @@ fn seed_settings(apps: Vec<ApplicationConfigurationDocument>) -> ConfigurationDa
             spotlight_enabled: true,
             spotlight_modifier: crate::input::keyboard_input::LEFT_ALT,
             spotlight_custom_directories: None,
+            hide_windows_taskbar: false,
+            taskbar_modifier: crate::input::keyboard_input::LEFT_ALT,
         }),
         migrations: Vec::new(),
     }

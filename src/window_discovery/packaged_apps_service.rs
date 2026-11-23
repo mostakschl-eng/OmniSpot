@@ -183,7 +183,7 @@ impl PackagedAppsService {
     }
 }
 
-fn get_aumid_by_process_id(process_id: u32) -> Option<String> {
+pub(crate) fn get_aumid_by_process_id(process_id: u32) -> Option<String> {
     let process = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }
     {
         Ok(handle) => OwnedHandle(handle),

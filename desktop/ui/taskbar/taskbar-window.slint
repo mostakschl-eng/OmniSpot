@@ -1,14 +1,16 @@
 import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
-import { Actions, OmniTheme, PopupCard, Symbol } from "../theme.slint";
+import { Actions, OmniTheme, Symbol } from "../theme.slint";
 import { SettingSwitch } from "../controls/setting-row.slint";
-import { PanelButton, RailIconButton, TabPillButton, ThemeSwitchPill } from "controls.slint";
+import { TabPillButton } from "controls.slint";
 import { SearchResults, TaskbarResult } from "search-results.slint";
 import { QuickSettings } from "quick-settings.slint";
 import { NotificationList, TaskbarNotification } from "notifications.slint";
 import { CalendarMonth } from "calendar.slint";
 import { DockApp } from "app-dock.slint";
 import { TaskbarStrip } from "taskbar-strip.slint";
-import { RailLogoButton, WinXList, WinXRow, WindowsLogo } from "win-menu.slint";
+import { WinXList } from "win-menu.slint";
+import { TaskbarHeader } from "taskbar-header.slint";
+import { TaskbarSidebar } from "taskbar-sidebar.slint";
 
 export component TaskbarWindow inherits Window {
     in property <[TaskbarResult]> results;
@@ -23,6 +25,8 @@ export component TaskbarWindow inherits Window {
     in property <float> volume;
     in property <float> brightness;
     in property <[string]> desktops;
+    in property <string> action-feedback;
+    in property <bool> keep-above: true;
     in property <bool> taskbar-test-active;
     in property <int> taskbar-test-seconds;
     in property <string> taskbar-test-status;
@@ -32,19 +36,16 @@ export component TaskbarWindow inherits Window {
     in-out property <bool> fullscreen: false;
     in-out property <bool> quick-open: true;
     in-out property <bool> center-apps: true;
-    in-out property <bool> show-tray: true;
     private property <int> selected-index;
     private property <int> page;
     private property <string> preview-action;
-    private property <string> rail-hint:
-        r-winx.hovered ? "Windows" : r-home.hovered ? "Home" : r-search.hovered ? "Search" : r-windows.hovered ? "Task view"
-        : r-apps.hovered ? "Apps" : r-notes.hovered ? "Notifications" : r-settings.hovered ? "Settings" : "";
     private property <string> footer-hint:
-        strip.hovered-app != "" ? strip.hovered-app
-        : strip.hovered-label != "" ? strip.hovered-label
-        : root.rail-hint != "" ? root.rail-hint
+        root.action-feedback != "" ? root.action-feedback
+        : strip.hovered-app != "" ? strip.hovered-app
+        : sidebar.hovered-label != "" ? sidebar.hovered-label
+        : header.hovered-label != "" ? header.hovered-label
         : root.preview-action != "" ? root.preview-action
-        : root.page == 4 || root.page == 5 || root.page == 6 ? "Esc Close" : "↑ ↓ Navigate     Enter Select     Esc Close";
+        : root.page == 4 || root.page == 5 || root.page == 6 ? "" : "↑ ↓ Navigate     Enter Select";
     callback clear-notifications();
     callback dismiss();
     callback toggle-taskbar-test(bool);
@@ -56,6 +57,7 @@ export component TaskbarWindow inherits Window {
     min-width: 960px;
     min-height: 600px;
     no-frame: true;
+    always-on-top: root.keep-above;
     full-screen: root.fullscreen;
     background: transparent;
     default-font-family: "Segoe UI";
@@ -104,10 +106,6 @@ export component TaskbarWindow inherits Window {
             width: parent.width;
             height: parent.height;
             key-pressed(event) => {
-                if event.text == Key.Escape {
-                    if root.fullscreen { root.fullscreen = false; } else { root.dismiss(); }
-                    return accept;
-                }
                 if event.text == Key.UpArrow && root.page != 4 && root.page != 5 && root.results.length > 0 {
                     root.selected-index = max(0, root.selected-index - 1);
                     return accept;
@@ -125,145 +123,33 @@ export component TaskbarWindow inherits Window {
                 padding: 0px;
                 spacing: 0px;
 
-                // Header
-                HorizontalBox {
-                    height: 56px;
-                    padding-left: 18px;
-                    padding-right: 18px;
-                    padding-top: 10px;
-                    padding-bottom: 10px;
-                    spacing: 12px;
-
-                    Rectangle {
-                        width: 140px;
-                        TouchArea {
-                            pointer-event(event) => {
-                                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left && !root.fullscreen {
-                                    root.drag-window();
-                                }
-                            }
-                        }
-                        HorizontalBox {
-                            padding: 0px;
-                            spacing: 8px;
-                            alignment: start;
-                            Rectangle {
-                                width: 32px;
-                                height: 32px;
-                                border-radius: 8px;
-                                background: OmniTheme.glass-card;
-                                clip: true;
-                                Image {
-                                    source: @image-url("../../assets/app-switcher.png");
-                                    x: 4px; y: 4px; width: 24px; height: 24px;
-                                    image-fit: contain;
-                                }
-                            }
-                            Text {
-                                text: "OmniSpot";
-                                color: OmniTheme.text-primary;
-                                font-size: 18px;
-                                font-weight: 700;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        TouchArea {
-                            pointer-event(event) => {
-                                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left && !root.fullscreen {
-                                    root.drag-window();
-                                }
-                            }
-                        }
-                    }
-
-                    PanelButton {
-                        width: 36px;
-                        label: "Quick settings";
-                        caption: "";
-                        glyph: "\u{e9e9}";
-                        selected: root.quick-open;
-                        activated => { root.quick-open = !root.quick-open; }
-                    }
-
-                    ThemeSwitchPill {
-                        dark: OmniTheme.dark;
-                        toggle-theme => { OmniTheme.requested-theme = OmniTheme.dark ? 2 : 1; }
-                    }
-
-                    PanelButton {
-                        width: 36px;
-                        label: root.fullscreen ? "Exit full screen" : "Full screen";
-                        caption: "";
-                        glyph: root.fullscreen ? "\u{e73f}" : "\u{e740}";
-                        activated => { root.fullscreen = !root.fullscreen; }
-                    }
-
-                    PanelButton {
-                        width: 36px;
-                        label: "Close";
-                        caption: "";
-                        glyph: "\u{e711}";
-                        activated => { root.dismiss(); }
-                    }
+                header := TaskbarHeader {
+                    page: root.page;
+                    notification-count: root.notifications.length;
+                    time: root.time;
+                    short-date: root.short-date;
+                    calendar-month: root.calendar-month;
+                    quick-open <=> root.quick-open;
+                    fullscreen <=> root.fullscreen;
+                    navigate(page) => { root.navigate(page); }
+                    action(target) => { root.act(target); }
+                    drag-window => { root.drag-window(); }
+                    dismiss => { root.dismiss(); }
                 }
 
                 Rectangle { height: 1px; background: OmniTheme.glass-border-subtle; }
 
-                // Body: rail + content + quick settings
+                // Navigation, search and quick settings
                 HorizontalBox {
                     vertical-stretch: 1;
                     padding: 0px;
                     spacing: 0px;
 
-                    Rectangle {
-                        width: 66px;
-                        VerticalBox {
-                            width: parent.width;
-                            height: parent.height;
-                            padding-top: 14px;
-                            padding-bottom: 14px;
-                            padding-left: 12px;
-                            padding-right: 12px;
-                            spacing: 12px;
-                            alignment: start;
 
-                            r-winx := RailLogoButton {
-                                selected: root.page == 6;
-                                activated => { root.navigate(6); }
-                                chosen(target) => { root.act(target); }
-                            }
-                            r-home := RailIconButton {
-                                glyph: "\u{e80f}"; label: "Home"; selected: root.page == 0;
-                                activated => { root.navigate(0); }
-                            }
-                            r-search := RailIconButton {
-                                glyph: "\u{e721}"; label: "Search"; selected: root.page == 1;
-                                activated => { root.navigate(1); }
-                            }
-                            r-windows := RailIconButton {
-                                glyph: "\u{e7c4}"; label: "Task view"; selected: root.page == 2;
-                                activated => { root.navigate(2); }
-                            }
-                            r-apps := RailIconButton {
-                                glyph: "\u{e71d}"; label: "Apps"; selected: root.page == 3;
-                                activated => { root.navigate(3); }
-                            }
-                            r-notes := RailIconButton {
-                                glyph: "\u{ea8f}"; label: "Notifications"; selected: root.page == 4;
-                                badge-count: root.notifications.length;
-                                activated => { root.navigate(4); }
-                            }
-                        }
-                        r-settings := RailIconButton {
-                            x: 12px;
-                            y: parent.height - 56px;
-                            glyph: "\u{e713}"; label: "Settings"; selected: root.page == 5;
-                            activated => { root.navigate(5); }
-                        }
+                    sidebar := TaskbarSidebar {
+                        page: root.page;
+                        navigate(page) => { root.navigate(page); }
+                        action(target) => { root.act(target); }
                     }
                     Rectangle { width: 1px; background: OmniTheme.glass-border-subtle; }
 
@@ -456,21 +342,8 @@ export component TaskbarWindow inherits Window {
 
                 strip := TaskbarStrip {
                     apps: root.apps;
-                    time: root.time;
-                    short-date: root.short-date;
-                    calendar-month: root.calendar-month;
-                    notification-count: root.notifications.length;
-                    active-page: root.page;
-                    quick-open: root.quick-open;
                     center-apps: root.center-apps;
-                    show-tray: root.show-tray;
-                    open-start => { root.navigate(0); }
-                    open-search => { root.navigate(1); }
-                    open-task-view => { root.navigate(2); }
-                    open-notifications => { root.navigate(4); }
-                    toggle-quick => { root.quick-open = !root.quick-open; }
                     app-selected(name) => { root.act(name); }
-                    action(label) => { root.act(label); }
                 }
             }
         }

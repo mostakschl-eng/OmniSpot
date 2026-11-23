@@ -1,6 +1,6 @@
 use super::dynamic_mode_service::DynamicModeService;
 use super::key_state_machine::{timestamp, KeyStateMachine, KeyTransition};
-use super::keyboard_input::{self, D0, D1, SPACE};
+use super::keyboard_input::{self, D0, D1};
 use super::peeker::Peeker;
 use crate::configuration::configuration::Configuration;
 use crate::runtime::{file_name, RuntimeError};
@@ -42,6 +42,7 @@ pub(crate) trait HookHost {
     fn hide_overlay(&mut self);
     fn show_warning(&mut self, warning: Warning);
     fn toggle_spotlight(&mut self);
+    fn toggle_taskbar(&mut self) {}
     fn enqueue_stats(&mut self, event: StatsEvent);
     // Run IProcessInspector.WaitForPotentialElevation off the UI thread and dispatch
     // potential_elevation_detected back to this Hook only when it returns true.
@@ -60,7 +61,7 @@ pub(crate) struct Hook<E: IWindowEnumerator, R: IAppNameResolver, H: HookHost> {
     overlay_preview_enabled: Option<bool>,
     suppressed_letter_keys: HashSet<u32>,
     suppressed_digit_keys: HashSet<u32>,
-    spotlight_key_suppressed: bool,
+    suppressed_popup_keys: HashSet<u32>,
     passthrough_letter_keys: HashSet<u32>,
     previous_letter_up_tick: Option<i64>,
 }
@@ -84,7 +85,7 @@ impl<E: IWindowEnumerator, R: IAppNameResolver, H: HookHost> Hook<E, R, H> {
             overlay_preview_enabled: None,
             suppressed_letter_keys: HashSet::new(),
             suppressed_digit_keys: HashSet::new(),
-            spotlight_key_suppressed: false,
+            suppressed_popup_keys: HashSet::new(),
             passthrough_letter_keys: HashSet::new(),
             previous_letter_up_tick: None,
         }
@@ -116,6 +117,10 @@ impl<E: IWindowEnumerator, R: IAppNameResolver, H: HookHost> Hook<E, R, H> {
         );
         self.host
             .configure_overlay_timer(config.overlay_show_delay_ms);
+    }
+
+    pub fn set_taskbar_modifier(&mut self, modifier: u32) {
+        self.state_machine.set_taskbar_modifier(modifier);
     }
 
     pub fn set_overlay_preview_enabled(&mut self, enabled: bool) {
@@ -165,7 +170,7 @@ impl<E: IWindowEnumerator, R: IAppNameResolver, H: HookHost> Hook<E, R, H> {
         physically_down: impl Fn(u32) -> bool,
     ) -> Result<(), RuntimeError> {
         use KeyTransition::*;
-        if event.key == SPACE && self.spotlight_key_suppressed {
+        if self.suppressed_popup_keys.contains(&event.key) {
             event.suppress_key_press = true;
             return Ok(());
         }
@@ -173,7 +178,9 @@ impl<E: IWindowEnumerator, R: IAppNameResolver, H: HookHost> Hook<E, R, H> {
         let modifier = self.config.as_ref().unwrap().modifier;
         let suppressed_modifier = self.state_machine.configured_modifier_has_side_effect();
         let modifier_is_down = || suppressed_modifier || physically_down(modifier);
-        match self.state_machine.process_key_down(event.key) {
+        let alt_down = event.flags
+            & windows::Win32::UI::WindowsAndMessaging::LLKHF_ALTDOWN.0 != 0;
+        match self.state_machine.process_key_down_with_alt(event.key, alt_down) {
             ModifierPressed {
                 is_first_press,
                 has_side_effect,
@@ -199,12 +206,15 @@ impl<E: IWindowEnumerator, R: IAppNameResolver, H: HookHost> Hook<E, R, H> {
                     self.handle_digit_pressed(event, digit)?;
                 }
             }
-            SpotlightShortcutPressed => {
+            shortcut @ (SpotlightShortcutPressed | TaskbarShortcutPressed) => {
                 event.suppress_key_press = true;
-                self.spotlight_key_suppressed = true;
+                self.suppressed_popup_keys.insert(event.key);
                 self.host.cancel_overlay_timer();
                 self.host.hide_overlay();
-                self.host.toggle_spotlight();
+                match shortcut {
+                    SpotlightShortcutPressed => self.host.toggle_spotlight(),
+                    _ => self.host.toggle_taskbar(),
+                }
             }
             AltTabSwitched(count) => self.host.enqueue_stats(StatsEvent::AltTabEvent(count)),
             UnrelatedKeyReset => self.reset_modifier_state(),
@@ -215,7 +225,7 @@ impl<E: IWindowEnumerator, R: IAppNameResolver, H: HookHost> Hook<E, R, H> {
 
     fn handle_key_up(&mut self, event: &mut KeyboardHookEvent) -> Result<(), RuntimeError> {
         use KeyTransition::*;
-        if event.key == SPACE && std::mem::take(&mut self.spotlight_key_suppressed) {
+        if self.suppressed_popup_keys.remove(&event.key) {
             event.suppress_key_press = true;
             return Ok(());
         }
